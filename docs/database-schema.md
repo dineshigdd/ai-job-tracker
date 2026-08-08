@@ -11,6 +11,7 @@ This document outlines the relational database schema for the AI-Powered Job App
 
 ## ER diagram
 
+```
 +-----------------------+       +-----------------------+
 |        users          |       |        resumes        |
 +-----------------------+       +-----------------------+
@@ -41,6 +42,7 @@ This document outlines the relational database schema for the AI-Powered Job App
 |     updated_at        |
 +-----------------------+
 
+```
 ---
 
 ## Tables
