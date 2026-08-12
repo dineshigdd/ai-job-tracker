@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.database import engine
 from sqlalchemy import text
-from app.routers import jobs, users
+from app.routers import jobs, users , auth
 
 
 # Lifespan event handler for startup and shutdown events
@@ -34,3 +34,4 @@ def read_root():
 
 app.include_router(jobs.router)
 app.include_router(users.router)
+app.include_router(auth.router)
