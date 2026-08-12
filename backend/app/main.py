@@ -2,6 +2,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.database import engine
 from sqlalchemy import text
+from app.routers import jobs, users
+
 
 # Lifespan event handler for startup and shutdown events
 @asynccontextmanager
@@ -29,3 +31,6 @@ app = FastAPI(
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the AI-Powered Job Application Tracker API!"}
+
+app.include_router(jobs.router)
+app.include_router(users.router)
