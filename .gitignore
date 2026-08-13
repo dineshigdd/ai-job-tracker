@@ -24,3 +24,6 @@ Thumbs.db
 
 # Docker volumes / data
 postgres_data/
+
+#Temp Claude files
+.claude/

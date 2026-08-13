@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
+from datetime import datetime, timezone
 
 from app.database import get_db
-from app.models import Job, User
+from app.models import Job, JobStatusEvent, User
 from app.schemas import JobCreate, JobUpdate, JobResponse
 from app.auth import get_current_user  # Import JWT auth dependency
 
@@ -38,9 +39,21 @@ def create_job(
         job_description=job.job_description,
         status=job.status,
         ai_cover_letter=job.ai_cover_letter,
-        match_score=job.match_score
+        match_score=job.match_score,
+        interview_date=job.interview_date
     )
     db.add(new_job)
+    db.flush()  # assigns new_job.id without ending the transaction
+
+    # First entry in this job's history. Without it the job is invisible to every
+    # dashboard conversion metric, which reads history rather than current status.
+    db.add(JobStatusEvent(
+        job_id=new_job.id,
+        user_id=current_user.id,
+        from_status=None,
+        to_status=new_job.status
+    ))
+
     db.commit()
     db.refresh(new_job)
     return new_job
@@ -69,10 +82,22 @@ def update_job(
     if not job:
         raise HTTPException(status_code=404, detail="Job application not found")
 
+    previous_status = job.status
+
     # Update only fields that were provided in the request
     update_data = job_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(job, key, value)
+
+    # Record the transition, but only when the status genuinely changed. A PUT that
+    # resends the same status must not fill the activity feed with no-op entries.
+    if job.status != previous_status:
+        db.add(JobStatusEvent(
+            job_id=job.id,
+            user_id=current_user.id,
+            from_status=previous_status,
+            to_status=job.status
+        ))
 
     db.commit()
     db.refresh(job)
@@ -118,6 +143,9 @@ async def create_ai_cover_letter(
     )
 
     job.ai_cover_letter = cover_letter
+    # Timestamp it so the dashboard can highlight *newly* generated letters;
+    # the column alone only proves one exists, not that it is recent
+    job.cover_letter_generated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(job)
 

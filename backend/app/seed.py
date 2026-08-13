@@ -1,13 +1,114 @@
+import random
+from datetime import datetime, timedelta, timezone
+
 from app.database import engine, SessionLocal
-from app.models import Base, User, Job
+from app.models import Base, User, Job, JobStatus, JobStatusEvent
 from passlib.context import CryptContext
 
 # Password hashing setup (using bcrypt, matching your requirements.txt)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Fixed seed so every run produces the same numbers; dashboard work is much easier
+# to verify when the expected interview rate does not move between runs.
+rng = random.Random(42)
+
+NOW = datetime.now(timezone.utc)
+
+
 def hash_password(password: str):
     safe_password = password[:72]
     return pwd_context.hash(safe_password)
+
+
+# --- Sample job pool -------------------------------------------------------------
+
+COMPANIES = [
+    ("Google", "Full Stack Engineer"), ("Stripe", "Backend Developer"),
+    ("OpenAI", "AI Integration Engineer"), ("Datadog", "Platform Engineer"),
+    ("Shopify", "Senior Python Engineer"), ("Cloudflare", "Systems Engineer"),
+    ("Atlassian", "Backend Engineer"), ("Netflix", "Data Platform Engineer"),
+    ("Airbnb", "API Engineer"), ("Notion", "Product Engineer"),
+    ("Figma", "Infrastructure Engineer"), ("Linear", "Full Stack Developer"),
+    ("Vercel", "Developer Experience Engineer"), ("Supabase", "Database Engineer"),
+    ("Anthropic", "Backend Engineer"), ("Ramp", "Payments Engineer"),
+    ("Plaid", "Integrations Engineer"), ("Twilio", "API Platform Engineer"),
+    ("Databricks", "Distributed Systems Engineer"), ("Snowflake", "Query Engine Engineer"),
+    ("HashiCorp", "Cloud Engineer"), ("GitLab", "Backend Engineer"),
+    ("Elastic", "Search Engineer"), ("MongoDB", "Solutions Engineer"),
+    ("Redis", "Core Engineer"), ("Confluent", "Streaming Engineer"),
+    ("Canva", "Backend Engineer"), ("Miro", "Platform Engineer"),
+]
+
+DESCRIPTION = (
+    "Design, build and operate {role} systems. You will work with Python, FastAPI and "
+    "PostgreSQL, own services end to end, and partner closely with product teams. "
+    "Requirements: 3+ years backend experience, strong SQL, REST API design, and "
+    "familiarity with cloud infrastructure and CI/CD."
+)
+
+# Each trajectory is the ordered list of statuses an application passed through.
+# Weights are tuned to look like a real job hunt: most applications go nowhere,
+# a quarter reach an interview, a couple convert.
+TRAJECTORIES = [
+    ([JobStatus.WISHLIST], 3),
+    ([JobStatus.APPLIED], 7),
+    ([JobStatus.APPLIED, JobStatus.REJECTED], 13),
+    ([JobStatus.APPLIED, JobStatus.INTERVIEWING], 4),
+    ([JobStatus.APPLIED, JobStatus.INTERVIEWING, JobStatus.REJECTED], 3),
+    ([JobStatus.APPLIED, JobStatus.INTERVIEWING, JobStatus.OFFER], 2),
+]
+
+
+def build_job(user, company, title, first_seen, trajectory):
+    """Creates a Job plus the JobStatusEvent rows describing how it got there."""
+    job = Job(
+        user_id=user.id,
+        company_name=company,
+        job_title=title,
+        job_description=DESCRIPTION.format(role=title.lower()),
+        status=trajectory[-1].value,
+        match_score=rng.randint(58, 98),
+        created_at=first_seen,
+        updated_at=first_seen,
+    )
+
+    # Roughly two thirds of applications got an AI cover letter
+    if trajectory[0] is not JobStatus.WISHLIST and rng.random() < 0.65:
+        job.ai_cover_letter = (
+            f"Dear {company} Hiring Team,\n\nI am writing to apply for the {title} role. "
+            "My background in backend engineering with Python and PostgreSQL maps "
+            "closely to what you are building...\n\nSincerely,\nA. Developer"
+        )
+        job.cover_letter_generated_at = first_seen + timedelta(hours=rng.randint(1, 30))
+
+    events = []
+    changed_at = first_seen
+    previous = None
+    for status in trajectory:
+        events.append(JobStatusEvent(
+            job=job,
+            user_id=user.id,
+            from_status=previous.value if previous else None,
+            to_status=status.value,
+            changed_at=changed_at,
+        ))
+        previous = status
+        # Real pipelines move in fits and starts
+        changed_at = changed_at + timedelta(days=rng.randint(3, 18))
+
+    job.updated_at = events[-1].changed_at
+
+    # Give every job that reached Interviewing a real interview date. Anything still
+    # sitting in Interviewing gets a future one, so "upcoming interviews" is populated.
+    if JobStatus.INTERVIEWING in trajectory:
+        interview_event = next(e for e in events if e.to_status == JobStatus.INTERVIEWING.value)
+        if trajectory[-1] is JobStatus.INTERVIEWING:
+            job.interview_date = NOW + timedelta(days=rng.randint(1, 12), hours=rng.randint(0, 8))
+        else:
+            job.interview_date = interview_event.changed_at + timedelta(days=rng.randint(2, 7))
+
+    return job, events
+
 
 def seed_database():
     print("🌱 Starting database seeding...")
@@ -19,6 +120,8 @@ def seed_database():
 
     # 2. Open a database session
     db = SessionLocal()
+    # Keep in-memory values usable after commit, for the summary printed at the end
+    db.expire_on_commit = False
 
     try:
         # 3. Create sample users
@@ -31,56 +134,74 @@ def seed_database():
             email="applicant@example.com",
             hashed_password=hash_password("securepassword")
         )
-        
-        db.add_all([user1, user2])
-        db.commit() # Commit to generate user IDs
-
-        # Refresh instances to get their database assigned IDs
-        db.refresh(user1)
-        db.refresh(user2)
-
-        # 4. Create sample jobs tied to those users
-        print("Creating sample jobs...")
-        job1 = Job(
-            user_id=user1.id,
-            company_name="Google",
-            job_title="Full Stack Engineer",
-            job_description="Build scalable web applications using React, Python, and cloud services.",
-            status="Interviewing",
-            ai_cover_letter="Dear Hiring Manager, I am thrilled to apply...",
-            match_score=92
-        )
-        
-        job2 = Job(
-            user_id=user1.id,
-            company_name="Stripe",
-            job_title="Backend Developer",
-            job_description="Develop high-performance payment microservices with FastAPI and PostgreSQL.",
-            status="Applied",
-            ai_cover_letter="Dear Stripe Team, With my background in backend APIs...",
-            match_score=85
+        # Deliberately left with no jobs, so the dashboard's empty state is testable
+        user3 = User(
+            email="newcomer@example.com",
+            hashed_password=hash_password("password123")
         )
 
-        job3 = Job(
-            user_id=user2.id,
-            company_name="OpenAI",
-            job_title="AI Integration Engineer",
-            job_description="Integrate cutting-edge LLMs into user-facing product workflows.",
-            status="Offered",
-            ai_cover_letter="Dear OpenAI Team, Passionate about safe AI systems...",
-            match_score=98
-        )
+        db.add_all([user1, user2, user3])
+        db.commit()  # Commit to generate user IDs
 
-        db.add_all([job1, job2, job3])
+        for user in (user1, user2, user3):
+            db.refresh(user)
+
+        # 4. Create sample jobs with full status histories
+        print("Creating sample jobs and status histories...")
+
+        # Draw trajectories from a shuffled deck rather than sampling with
+        # replacement, so the resulting rates actually match the weights above
+        # instead of drifting with the random draw.
+        deck = [t for t, weight in TRAJECTORIES for _ in range(weight)]
+        rng.shuffle(deck)
+        pool = COMPANIES[:]
+        rng.shuffle(pool)
+
+        records = []
+        # user1 gets a dense five-month history; user2 a smaller one, which also
+        # proves the dashboard's per-user filtering actually isolates data
+        drawn = 0
+        for user, count, span_days in ((user1, 22, 150), (user2, 6, 60)):
+            for company, title in pool[:count]:
+                first_seen = NOW - timedelta(
+                    days=rng.randint(20, span_days), hours=rng.randint(0, 23)
+                )
+                trajectory = deck[drawn % len(deck)]
+                drawn += 1
+                records.append(build_job(user, company, title, first_seen, trajectory))
+            pool = pool[count:]
+
+        for job, events in records:
+            db.add(job)
+            db.add_all(events)
         db.commit()
 
-        print("✨ Database seeding completed successfully!")
+        # 5. Report what was created, so the numbers the dashboard should show are known
+        jobs = [job for job, _ in records]
+        events = [e for _, evs in records for e in evs]
+        user1_jobs = [j for j in jobs if j.user_id == user1.id]
+        submitted = [j for j in user1_jobs if j.status != JobStatus.WISHLIST.value]
+        user1_events = [e for e in events if e.user_id == user1.id]
+        reached = lambda s: len({e.job_id for e in user1_events if e.to_status == s.value})
+
+        print(f"\n✨ Seeded {len(jobs)} jobs and {len(events)} status events.")
+        print(f"\ndeveloper@example.com — {len(user1_jobs)} jobs, {len(submitted)} submitted")
+        for status in JobStatus:
+            print(f"   {status.value:<13} {sum(1 for j in user1_jobs if j.status == status.value)}")
+        if submitted:
+            print(f"   Interview Rate  {reached(JobStatus.INTERVIEWING) / len(submitted):.1%}"
+                  f"  ({reached(JobStatus.INTERVIEWING)}/{len(submitted)} ever reached)")
+            print(f"   Offer Rate      {reached(JobStatus.OFFER) / len(submitted):.1%}"
+                  f"  ({reached(JobStatus.OFFER)}/{len(submitted)} ever reached)")
+        print(f"   Upcoming interviews  {sum(1 for j in user1_jobs if j.interview_date and j.interview_date > NOW)}")
+        print("\n✨ Database seeding completed successfully!")
 
     except Exception as e:
         print(f"❌ Error seeding database: {e}")
         db.rollback()
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     seed_database()
