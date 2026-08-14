@@ -21,4 +21,4 @@ To eliminate the friction, chaos, and manual work of tracking job applications b
 ## Testing & Quality Assurance
 
 This project includes a comprehensive test suite for the FastAPI backend and database layers. 
-For detailed instructions on how to run, configure, and write tests, please refer to the [Testing Documentation](./backend/tests/testing.md).
+For detailed instructions on how to run, configure, and write tests, please refer to the [Testing Documentation](./backend/tests/TESTING.md).
