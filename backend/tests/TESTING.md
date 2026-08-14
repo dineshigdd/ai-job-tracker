@@ -21,14 +21,33 @@ tests/
 
 ## Running Tests
 
+### Prerequisites
 ```bash
-# All tests
+pip install -r requirements-test.txt
+```
+
+### Run All Tests
+```bash
 pytest tests/
+```
 
-# Specific module
+### Run Specific Module
+```bash
 pytest tests/test_search_filter.py
+```
 
-# With coverage
+### Run Specific Class
+```bash
+pytest tests/test_search_filter.py::TestStatusFilter
+```
+
+### Run Specific Test
+```bash
+pytest tests/test_search_filter.py::TestStatusFilter::test_filter_by_status_applied
+```
+
+### Run with Coverage
+```bash
 pytest tests/ --cov=app --cov-report=term-missing
 ```
 
