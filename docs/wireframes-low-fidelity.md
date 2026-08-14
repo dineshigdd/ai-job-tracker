@@ -11,6 +11,7 @@
 ---
 
 ## Authentication View (/users/login & /users/register)
+```
 +---------------------------------------------------------------------------------------------------+
 |                                                                                                   |
 |                                     +-----------------------+                                     |
@@ -34,10 +35,11 @@
 |                                     +-----------------------+                                     |
 |                                                                                                   |
 +---------------------------------------------------------------------------------------------------+
-
+```
 
 ## Main Dashboard & Analytics Overview (/dashboard/stats)
 Focus: High-level metrics powered by GET /dashboard/stats, quick actions, and sidebar navigation.
+```
 +---------------------------------------------------------------------------------------------------+
 | 🚀 JobTracker AI            [Search applications...]                   (🔔)  [ Avatar v ] (/users/me) |
 +------------------+--------------------------------------------------------------------------------+
@@ -63,9 +65,10 @@ Focus: High-level metrics powered by GET /dashboard/stats, quick actions, and si
 |                  |  | Stripe - Frontend Dev      | Applied      | Applied 5 days ago           |  |
 |                  |  +--------------------------------------------------------------------------+  |
 +------------------+--------------------------------------------------------------------------------+
-
+```
 ## Resume Optimization View (/resumes/analyze)
 Focus: Two-column split interface allowing users to upload resumes and query OpenAI integration via FastAPI.
+```
 +------------------+--------------------------------------------------------------------------------+
 | 🚀 JobTracker AI |  AI Resume Analyzer & ATS Matcher                     [ Avatar v ]             |
 +------------------+--------------------------------------------------------------------------------+
@@ -84,9 +87,10 @@ Focus: Two-column split interface allowing users to upload resumes and query Ope
 |                  |  |                                  |  | - Highlight cloud container deploy |  |
 |                  |  +----------------------------------+  +------------------------------------+  |
 +------------------+--------------------------------------------------------------------------------+
-
+```
 ## User Profile View (/users/me)
 Focus: Account setting modifications (PUT /users/me) and safety precautions (DELETE /users/me).
+```
 +------------------+--------------------------------------------------------------------------------+
 | 🚀 JobTracker AI |  Account Settings & Profile                           [ Avatar v ]             |
 +------------------+--------------------------------------------------------------------------------+
@@ -106,3 +110,4 @@ Focus: Account setting modifications (PUT /users/me) and safety precautions (DEL
 |                  |  |                                             [ Delete Account Button ]    |  |
 |                  |  +--------------------------------------------------------------------------+  |
 +------------------+--------------------------------------------------------------------------------+
+```
