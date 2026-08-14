@@ -17,3 +17,8 @@ To eliminate the friction, chaos, and manual work of tracking job applications b
 4. **Dashboard Analytics & Statistics** Aggregates pipeline volume and application metrics at the database level to display quick performance insights at a glance.
 5. **Resume Management & Parsing** Extracts text from uploaded PDF resumes to evaluate professional strengths and feedback using AI.
 6. **AI Cover Letter Generator** Automatically synthesizes resume data and job descriptions to generate tailored, ready-to-use cover letters.
+
+## Testing & Quality Assurance
+
+This project includes a comprehensive test suite for the FastAPI backend and database layers. 
+For detailed instructions on how to run, configure, and write tests, please refer to the [Testing Documentation](./backend/tests/testing.md).
