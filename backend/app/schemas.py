@@ -57,6 +57,14 @@ class JobResponse(JobBase):
     class Config:
         from_attributes = True
 
+class JobListResponse(BaseModel):
+    """Paginated envelope for GET /jobs/. `total` counts every row matching the
+    filters, not the rows on this page, so the client can render "1-50 of 213"."""
+    items: List[JobResponse]
+    total: int
+    limit: int
+    offset: int
+
 
 # --- DASHBOARD SCHEMAS ---
 

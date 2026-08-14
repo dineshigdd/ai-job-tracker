@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timezone
+from enum import Enum
 
 from app.database import get_db
-from app.models import Job, JobStatusEvent, User
-from app.schemas import JobCreate, JobUpdate, JobResponse
+from app.models import Job, JobStatus, JobStatusEvent, User
+from app.schemas import JobCreate, JobUpdate, JobResponse, JobListResponse
 from app.auth import get_current_user  # Import JWT auth dependency
 
 from app.services.ai_service import generate_cover_letter
@@ -16,14 +18,72 @@ router = APIRouter(
     tags=["Jobs"]
 )
 
-@router.get("/", response_model=List[JobResponse])
+
+class JobSort(str, Enum):
+    NEWEST = "newest"
+    OLDEST = "oldest"
+    COMPANY = "company"
+    UPDATED = "updated"
+
+
+# Every sort ends with `id` as a tiebreaker. Without it, rows sharing a created_at
+# have no defined order, and paging could show one job twice while skipping another.
+SORT_CLAUSES = {
+    JobSort.NEWEST: (Job.created_at.desc(), Job.id.desc()),
+    JobSort.OLDEST: (Job.created_at.asc(), Job.id.asc()),
+    JobSort.COMPANY: (Job.company_name.asc(), Job.id.asc()),
+    JobSort.UPDATED: (Job.updated_at.desc(), Job.id.desc()),
+}
+
+MAX_SEARCH_LENGTH = 100
+
+
+def _escape_like(term: str) -> str:
+    """Escapes LIKE wildcards so a search for '100%' or 'senior_dev' matches those
+    characters literally instead of treating them as pattern syntax."""
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+@router.get("/", response_model=JobListResponse)
 def get_jobs(
+    # Aliased because `status` is already bound to fastapi.status in this module
+    status_filter: Optional[JobStatus] = Query(
+        None, alias="status",
+        description="Exact pipeline stage. An unknown value is rejected with 422."
+    ),
+    search: Optional[str] = Query(
+        None, max_length=MAX_SEARCH_LENGTH,
+        description="Case-insensitive keyword, matched against company name and job title."
+    ),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    sort: JobSort = Query(JobSort.NEWEST),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Fetch all job application entries belonging ONLY to the authenticated user."""
-    jobs = db.query(Job).filter(Job.user_id == current_user.id).all()
-    return jobs
+    """Fetch job application entries belonging ONLY to the authenticated user,
+    optionally filtered by status and/or keyword (US-08)."""
+    # The ownership filter is the base of the query; every other filter narrows it
+    query = db.query(Job).filter(Job.user_id == current_user.id)
+
+    if status_filter is not None:
+        query = query.filter(Job.status == status_filter.value)
+
+    term = (search or "").strip()
+    if term:
+        # Blank and whitespace-only searches fall through as "no filter"
+        pattern = f"%{_escape_like(term)}%"
+        query = query.filter(or_(
+            Job.company_name.ilike(pattern, escape="\\"),
+            Job.job_title.ilike(pattern, escape="\\"),
+        ))
+
+    # Counted with the same filters but no limit, so it reports total matches
+    # rather than the size of this page
+    total = query.count()
+
+    jobs = query.order_by(*SORT_CLAUSES[sort]).limit(limit).offset(offset).all()
+
+    return {"items": jobs, "total": total, "limit": limit, "offset": offset}
 
 @router.post("/", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
 def create_job(
