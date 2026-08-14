@@ -1,6 +1,6 @@
-# Test Cases for Job Search & Filter Feature
+# Backend API Tests
 
-This directory contains comprehensive test cases for the **Search & Filter** functionality of the `/jobs` endpoint.
+This directory contains comprehensive test cases for the **FastAPI backend**, covering the `/jobs` endpoint with search, filter, pagination, sorting, authentication, and response validation.
 
 ## Test File Structure
 
