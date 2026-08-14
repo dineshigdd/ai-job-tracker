@@ -1,4 +1,4 @@
-# Test Cases for Job Search & Filter Feature (US-08)
+# Test Cases for Job Search & Filter Feature
 
 This directory contains comprehensive test cases for the **Search & Filter** functionality of the `/jobs` endpoint.
 
