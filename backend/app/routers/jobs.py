@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from app.database import get_db
-from app.models import Job, JobStatus, JobStatusEvent, User
+from app.models import Job, JobStatus, JobStatusEvent, Resume, User
 from app.schemas import JobCreate, JobUpdate, JobResponse, JobListResponse
 from app.auth import get_current_user  # Import JWT auth dependency
 
@@ -193,13 +193,21 @@ async def create_ai_cover_letter(
     if not job.job_description or not job.job_description.strip():
         raise HTTPException(status_code=400, detail="Job description is required to generate a cover letter")
 
+    # Ground the letter in what the user has actually done. Without this the model
+    # only sees the job ad and writes generic claims. Not required: a user who has
+    # not uploaded a resume still gets a letter, just a less specific one.
+    resume = db.query(Resume).filter(
+        Resume.user_id == current_user.id, Resume.is_active.is_(True)
+    ).first()
+
     # Groq call: async so the event loop stays free during the several seconds
     # this takes. It raises HTTPException itself on rate limits / timeouts /
     # upstream errors, and nothing has been written yet at this point.
     cover_letter = await generate_cover_letter(
         job_title=job.job_title,
         company_name=job.company_name,
-        job_description=job.job_description
+        job_description=job.job_description,
+        resume_text=resume.extracted_text if resume else None
     )
 
     job.ai_cover_letter = cover_letter

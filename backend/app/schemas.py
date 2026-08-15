@@ -66,6 +66,39 @@ class JobListResponse(BaseModel):
     offset: int
 
 
+# --- RESUME SCHEMAS ---
+
+class ResumeSummary(BaseModel):
+    """A stored resume *without* its text.
+
+    Extracted text runs to thousands of characters, and no list view renders it, so
+    it is left out here and served only by the single-resume detail endpoint.
+    """
+    id: UUID
+    user_id: UUID
+    filename: str
+    # SHA-256 of the text. Also the version a match score is cached against.
+    content_hash: str
+    is_active: bool
+    extracted_text_length: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ResumeDetail(ResumeSummary):
+    extracted_text: str
+
+class ResumeAnalysisResponse(BaseModel):
+    """Response of both analyze endpoints. `filename`, `extracted_text_length` and
+    `ai_feedback` are kept at the top level so the original upload-and-analyze
+    contract still holds; `resume` carries what is now persisted."""
+    filename: str
+    extracted_text_length: int
+    ai_feedback: str
+    resume: ResumeSummary
+
+
 # --- DASHBOARD SCHEMAS ---
 
 class FunnelBlock(BaseModel):

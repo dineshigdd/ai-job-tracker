@@ -2,7 +2,9 @@ import random
 from datetime import datetime, timedelta, timezone
 
 from app.database import engine, SessionLocal
-from app.models import Base, User, Job, JobStatus, JobStatusEvent
+from app.models import (
+    Base, User, Job, JobStatus, JobStatusEvent, Resume, hash_resume_text,
+)
 from passlib.context import CryptContext
 
 # Password hashing setup (using bcrypt, matching your requirements.txt)
@@ -11,6 +13,9 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Fixed seed so every run produces the same numbers; dashboard work is much easier
 # to verify when the expected interview rate does not move between runs.
 rng = random.Random(42)
+# Resumes draw from their own stream, so adding or changing resume seed data cannot
+# shift a single job's match score or interview date.
+resume_rng = random.Random(1337)
 
 NOW = datetime.now(timezone.utc)
 
@@ -57,6 +62,113 @@ TRAJECTORIES = [
     ([JobStatus.APPLIED, JobStatus.INTERVIEWING, JobStatus.REJECTED], 3),
     ([JobStatus.APPLIED, JobStatus.INTERVIEWING, JobStatus.OFFER], 2),
 ]
+
+
+# --- Sample resumes --------------------------------------------------------------
+# Written the way pypdf actually returns text: plain lines, no styling, no columns.
+# Scoring reads this text, so it carries real skill keywords worth matching against.
+
+BACKEND_RESUME_V1 = """A. DEVELOPER
+Bangalore, India | a.developer@example.com | github.com/adeveloper
+
+SUMMARY
+Backend engineer with 4 years building REST APIs and data services.
+
+EXPERIENCE
+Backend Engineer, Zeta Systems (2022 - Present)
+- Built and maintained REST APIs in Python and Flask serving 40k daily requests.
+- Migrated a monolithic reporting job to Celery workers, cutting runtime from 50 to 9 minutes.
+- Wrote integration tests with pytest, raising coverage on the billing module to 82%.
+
+Software Engineer, Orbit Retail (2020 - 2022)
+- Developed order-management endpoints backed by PostgreSQL.
+- Added Redis caching to the catalogue service, reducing p95 latency by 35%.
+
+SKILLS
+Python, Flask, PostgreSQL, Redis, Celery, Docker, Git, pytest, REST APIs, Linux
+
+EDUCATION
+B.E. Computer Science, Anna University, 2020
+"""
+
+BACKEND_RESUME_V2 = """A. DEVELOPER
+Bangalore, India | a.developer@example.com | github.com/adeveloper | linkedin.com/in/adeveloper
+
+SUMMARY
+Backend engineer with 5 years designing, shipping and operating Python services on AWS.
+Owns systems end to end, from schema design to on-call.
+
+EXPERIENCE
+Senior Backend Engineer, Zeta Systems (2022 - Present)
+- Designed a FastAPI service replacing a legacy Flask monolith, now serving 120k requests/day.
+- Modelled the PostgreSQL schema and tuned slow queries, cutting p95 read latency from 400ms to 90ms.
+- Built the CI/CD pipeline in GitHub Actions with automated migrations and blue/green deploys.
+- Introduced structured logging and dashboards, reducing mean time to detect incidents to under 5 minutes.
+- Mentored two junior engineers through their first production services.
+
+Software Engineer, Orbit Retail (2020 - 2022)
+- Developed order-management endpoints backed by PostgreSQL and SQLAlchemy.
+- Added Redis caching to the catalogue service, reducing p95 latency by 35%.
+- Containerised six services with Docker, standardising local development.
+
+SKILLS
+Python, FastAPI, Flask, SQLAlchemy, PostgreSQL, Redis, Celery, Docker, Kubernetes,
+AWS (ECS, RDS, S3), GitHub Actions, CI/CD, pytest, REST API design, SQL, Linux
+
+EDUCATION
+B.E. Computer Science, Anna University, 2020
+"""
+
+DATA_RESUME = """P. APPLICANT
+Remote | p.applicant@example.com
+
+SUMMARY
+Data platform engineer with 3 years building batch and streaming pipelines.
+
+EXPERIENCE
+Data Engineer, Northwind Analytics (2023 - Present)
+- Built Airflow DAGs ingesting 2TB/day into Snowflake.
+- Wrote dbt models powering the executive revenue dashboard.
+- Cut warehouse spend 22% by rewriting three full-refresh models as incremental.
+
+Junior Data Engineer, Cinder Labs (2021 - 2023)
+- Maintained Python ETL scripts loading event data into PostgreSQL.
+- Added data quality checks that caught schema drift before it reached reporting.
+
+SKILLS
+Python, SQL, Airflow, dbt, Snowflake, PostgreSQL, Spark, Kafka, Docker, Git
+
+EDUCATION
+B.Sc. Statistics, University of Delhi, 2021
+"""
+
+# (filename, text, is_active, days_ago). One user carries two versions so the
+# "resume history" and version-comparison paths have something to read; the older
+# one is inactive because the partial unique index allows only one active per user.
+RESUMES = {
+    "user1": [
+        ("a-developer-resume-2024.pdf", BACKEND_RESUME_V1, False, 210),
+        ("a-developer-resume-backend.pdf", BACKEND_RESUME_V2, True, 45),
+    ],
+    "user2": [
+        ("p-applicant-data-engineer.pdf", DATA_RESUME, True, 30),
+    ],
+    # user3 deliberately has none, so the "upload your first resume" empty state
+    # and the "cannot score without a resume" error path are both testable
+    "user3": [],
+}
+
+
+def build_resume(user, filename, extracted_text, is_active, days_ago):
+    """Creates a Resume row exactly as the upload endpoint would after parsing a PDF."""
+    return Resume(
+        user_id=user.id,
+        filename=filename,
+        extracted_text=extracted_text,
+        content_hash=hash_resume_text(extracted_text),
+        is_active=is_active,
+        created_at=NOW - timedelta(days=days_ago, hours=resume_rng.randint(0, 23)),
+    )
 
 
 def build_job(user, company, title, first_seen, trajectory):
@@ -146,7 +258,17 @@ def seed_database():
         for user in (user1, user2, user3):
             db.refresh(user)
 
-        # 4. Create sample jobs with full status histories
+        # 4. Create sample resumes (parsed text only, as the upload endpoint stores it)
+        print("Creating sample resumes...")
+        resumes = []
+        for key, user in (("user1", user1), ("user2", user2), ("user3", user3)):
+            for filename, resume_text, is_active, days_ago in RESUMES[key]:
+                resumes.append(build_resume(user, filename, resume_text, is_active, days_ago))
+
+        db.add_all(resumes)
+        db.commit()
+
+        # 5. Create sample jobs with full status histories
         print("Creating sample jobs and status histories...")
 
         # Draw trajectories from a shuffled deck rather than sampling with
@@ -176,7 +298,7 @@ def seed_database():
             db.add_all(events)
         db.commit()
 
-        # 5. Report what was created, so the numbers the dashboard should show are known
+        # 6. Report what was created, so the numbers the dashboard should show are known
         jobs = [job for job, _ in records]
         events = [e for _, evs in records for e in evs]
         user1_jobs = [j for j in jobs if j.user_id == user1.id]
@@ -184,7 +306,16 @@ def seed_database():
         user1_events = [e for e in events if e.user_id == user1.id]
         reached = lambda s: len({e.job_id for e in user1_events if e.to_status == s.value})
 
-        print(f"\n✨ Seeded {len(jobs)} jobs and {len(events)} status events.")
+        print(f"\n✨ Seeded {len(jobs)} jobs, {len(events)} status events "
+              f"and {len(resumes)} resumes.")
+        for user, label in ((user1, "developer@example.com"),
+                            (user2, "applicant@example.com"),
+                            (user3, "newcomer@example.com")):
+            owned = [r for r in resumes if r.user_id == user.id]
+            active = next((r for r in owned if r.is_active), None)
+            print(f"   {label:<24} {len(owned)} resume(s), "
+                  f"active: {active.filename if active else 'none'}")
+
         print(f"\ndeveloper@example.com — {len(user1_jobs)} jobs, {len(submitted)} submitted")
         for status in JobStatus:
             print(f"   {status.value:<13} {sum(1 for j in user1_jobs if j.status == status.value)}")
