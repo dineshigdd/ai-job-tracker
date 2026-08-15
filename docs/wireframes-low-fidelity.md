@@ -1,16 +1,16 @@
 # Low Fidelity Wireframes
 
 ## Wireframe Mapping to APIs
-- Auth View: Interacts with token endpoints (/users/login, /users/register).
+- Auth View: Interacts with token endpoints (POST /auth/login, POST /users/, POST /users/login).
 
-- Dashboard View: Fetches summary data via GET /dashboard/stats and lists entries via GET /api/jobs.
+- Dashboard View: Fetches summary data via GET /dashboard/stats and lists entries via GET /jobs/.
 
 - Resume View: Uploads documents via multipart form data to POST /resumes/analyze.
 
 - Profile View: Manages user configuration via PUT /users/me and removal via DELETE /users/me.
 ---
 
-## Authentication View (/users/login & /users/register)
+## Authentication View (POST /auth/login, POST /users/, POST /users/login)
 ```
 +---------------------------------------------------------------------------------------------------+
 |                                                                                                   |
@@ -57,7 +57,7 @@ Focus: High-level metrics powered by GET /dashboard/stats, quick actions, and si
 |                  |                                                                                |
 |                  |  Quick Actions:                                                                |
 |                  |  [ 📄 Upload & Analyze New Resume ] -> triggers POST /resumes/analyze           |
-|                  |  [ + Track New Job Application    ] -> triggers POST /api/jobs                 |
+|                  |  [ + Track New Job Application    ] -> triggers POST /jobs/                 |
 |                  |                                                                                |
 |                  |  Recent Applications Preview                                                   |
 |                  |  +--------------------------------------------------------------------------+  |
@@ -83,7 +83,7 @@ Focus: Two-column split interface allowing users to upload resumes and query Ope
 |                  |  | [ Paste job description text...  |  | - Strong Python & FastAPI matching |  |
 |                  |  |   to match keywords against... ] |  | - Missing: Docker compose, AWS     |  |
 |                  |  |                                  |  |                                    |  |
-|                  |  | [ Analyze Resume (POST /analyze) ]| | AI Suggestions:                    |  |
+|                  |  | [ Analyze Resume (POST /resumes/analyze) ]| | AI Suggestions:                    |  |
 |                  |  |                                  |  | - Highlight cloud container deploy |  |
 |                  |  +----------------------------------+  +------------------------------------+  |
 +------------------+--------------------------------------------------------------------------------+
