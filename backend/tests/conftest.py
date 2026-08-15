@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from app.main import app
 from app.database import get_db, Base
-from app.models import User, Job, JobStatus, JobStatusEvent
+from app.models import User, Job, JobStatus, JobStatusEvent, Resume
 from app.auth import get_current_user
 
 # Use an in-memory SQLite database for testing
@@ -212,3 +212,107 @@ def create_special_char_jobs(db_session, test_user):
     
     db_session.commit()
     return jobs
+
+
+# Resume fixtures
+@pytest.fixture(scope="function")
+def test_resume(db_session, test_user):
+    """Create a test resume for the test user."""
+    resume = Resume(
+        user_id=test_user.id,
+        filename="test_resume.pdf",
+        extracted_text="Python Django developer with 5 years of experience",
+        content_hash="a" * 64,
+        is_active=True
+    )
+    db_session.add(resume)
+    db_session.commit()
+    db_session.refresh(resume)
+    return resume
+
+
+@pytest.fixture(scope="function")
+def inactive_resume(db_session, test_user):
+    """Create an inactive test resume for the test user."""
+    resume = Resume(
+        user_id=test_user.id,
+        filename="inactive_resume.pdf",
+        extracted_text="Old resume content",
+        content_hash="b" * 64,
+        is_active=False
+    )
+    db_session.add(resume)
+    db_session.commit()
+    db_session.refresh(resume)
+    return resume
+
+
+@pytest.fixture(scope="function")
+def test_job(db_session, test_user):
+    """Create a single test job for the test user."""
+    job = Job(
+        id=uuid4(),
+        user_id=test_user.id,
+        company_name="Test Company",
+        job_title="Test Job",
+        job_description="Test job description",
+        status=JobStatus.APPLIED
+    )
+    db_session.add(job)
+    db_session.commit()
+    db_session.refresh(job)
+    return job
+
+
+@pytest.fixture(scope="function")
+def test_job_with_description(db_session, test_user):
+    """Create a test job with a description."""
+    job = Job(
+        id=uuid4(),
+        user_id=test_user.id,
+        company_name="Test Company",
+        job_title="Senior Developer",
+        job_description="Looking for experienced Python developer",
+        status=JobStatus.APPLIED
+    )
+    db_session.add(job)
+    db_session.commit()
+    db_session.refresh(job)
+    return job
+
+
+@pytest.fixture(scope="function")
+def test_job_without_description(db_session, test_user):
+    """Create a test job without a description."""
+    job = Job(
+        id=uuid4(),
+        user_id=test_user.id,
+        company_name="Test Company",
+        job_title="Developer",
+        job_description=None,
+        status=JobStatus.APPLIED
+    )
+    db_session.add(job)
+    db_session.commit()
+    db_session.refresh(job)
+    return job
+
+
+@pytest.fixture(scope="function")
+def test_job_with_cover_letter(db_session, test_user):
+    """Create a test job with an existing cover letter."""
+    import datetime
+    job = Job(
+        id=uuid4(),
+        user_id=test_user.id,
+        company_name="Test Company",
+        job_title="Developer",
+        job_description="Python developer needed",
+        status=JobStatus.APPLIED,
+        ai_cover_letter="Existing cover letter content",
+        cover_letter_generated_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)
+    )
+    db_session.add(job)
+    db_session.commit()
+    db_session.refresh(job)
+    return job
