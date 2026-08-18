@@ -16,7 +16,11 @@ tests/
 ├── test_pagination.py        # Pagination tests
 ├── test_sorting.py          # Sorting tests
 ├── test_response.py         # API response structure tests
-└── test_edge_cases.py       # Edge case tests
+├── test_edge_cases.py       # Edge case tests
+├── test_ai_service.py       # AI service (cover letter, resume analysis) tests
+├── test_match_score.py      # ATS match scoring algorithm tests
+├── test_match_score_api.py  # Match score API endpoint tests
+└── test_resumes.py          # Resume upload, storage, and management tests
 ```
 
 ## Running Tests
@@ -57,9 +61,13 @@ pytest tests/ --cov=app --cov-report=term-missing
 |--------|-------|-------------|
 | test_helpers.py | 6 | Helper function tests |
 | test_auth.py | 2 | Authentication tests |
-| test_search_filter.py | 21 | Search and filter tests |
-| test_pagination.py | 7 | Pagination tests |
+| test_search_filter.py | 23 | Search and filter tests |
+| test_pagination.py | 8 | Pagination tests |
 | test_sorting.py | 5 | Sorting tests |
 | test_response.py | 3 | Response structure tests |
 | test_edge_cases.py | 4 | Edge case tests |
-| **Total** | **48** | All tests |
+| test_ai_service.py | 28 | AI service (cover letter, resume analysis) tests |
+| test_match_score.py | 40 | ATS match scoring algorithm tests |
+| test_match_score_api.py | 26 | Match score API endpoint tests |
+| test_resumes.py | 32 | Resume upload, storage, and management tests |
+| **Total** | **177** | All tests |

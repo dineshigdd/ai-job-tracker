@@ -1,4 +1,5 @@
 -r requirements.txt
 pytest==8.0.0
+pytest-asyncio==0.23.5  # without it, every @pytest.mark.asyncio test is silently skipped
 pytest-cov==4.1.0
 httpx==0.27.0

@@ -8,6 +8,8 @@ from fastapi import status
 from unittest.mock import AsyncMock, patch, MagicMock
 from uuid import uuid4
 
+import httpx
+
 from app.models import Job, User, Resume, JobStatus
 from app.services.ai_service import (
     generate_cover_letter,
@@ -15,6 +17,16 @@ from app.services.ai_service import (
     GROQ_MODEL,
     GROQ_TIMEOUT_SECONDS,
 )
+
+# `_truncate` marks a cut with a newline *and* the marker, so a truncated string is
+# 15 characters longer than the limit, not 14. Derived from the source rather than
+# hardcoded, so the tests cannot drift from it again.
+TRUNCATION_MARKER = "\n...[truncated]"
+
+
+def _fake_request() -> httpx.Request:
+    """A stand-in request for the openai exceptions that require one."""
+    return httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
 
 
 class TestCoverLetterGeneration:
@@ -234,16 +246,15 @@ class TestResumeAnalysis:
     """Test the resume analysis functionality."""
 
     @pytest.mark.asyncio
-    async def test_upload_and_analyze_resume(self, client, db_session, test_user):
+    async def test_upload_and_analyze_resume(self, client, db_session, test_user,
+                                             pdf_bytes):
         """Test uploading and analyzing a resume."""
-        pdf_content = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"
-        
         with patch("app.routers.resumes.analyze_resume", new_callable=AsyncMock) as mock_analyze:
             mock_analyze.return_value = "Test AI feedback"
-            
+
             response = client.post(
                 "/resumes/analyze",
-                files={"file": ("test.pdf", pdf_content)},
+                files={"file": ("test.pdf", pdf_bytes)},
                 data={"job_description": "Python developer"}
             )
             
@@ -325,7 +336,8 @@ class TestAIServiceFunctions:
     """Test the AI service functions directly."""
 
     @pytest.mark.asyncio
-    @patch("app.services.ai_service.client.chat.completions.create")
+    @patch("app.services.ai_service.client.chat.completions.create",
+            new_callable=AsyncMock)
     async def test_generate_cover_letter_function(self, mock_create):
         """Test the generate_cover_letter function directly."""
         # Setup mock response
@@ -352,7 +364,8 @@ class TestAIServiceFunctions:
         assert "messages" in call_kwargs
 
     @pytest.mark.asyncio
-    @patch("app.services.ai_service.client.chat.completions.create")
+    @patch("app.services.ai_service.client.chat.completions.create",
+            new_callable=AsyncMock)
     async def test_analyze_resume_function(self, mock_create):
         """Test the analyze_resume function directly."""
         # Setup mock response
@@ -370,7 +383,8 @@ class TestAIServiceFunctions:
         assert feedback == "Resume analysis feedback..."
 
     @pytest.mark.asyncio
-    @patch("app.services.ai_service.client.chat.completions.create")
+    @patch("app.services.ai_service.client.chat.completions.create",
+            new_callable=AsyncMock)
     async def test_truncate_function(self, mock_create):
         """Test the _truncate function."""
         from app.services.ai_service import _truncate
@@ -386,8 +400,8 @@ class TestAIServiceFunctions:
         # Test with text over limit
         long_text = "A" * 200
         result = _truncate(long_text, 100)
-        assert len(result) == 103  # 100 chars + "...[truncated]"
-        assert result.endswith("...[truncated]")
+        assert len(result) == 100 + len(TRUNCATION_MARKER)
+        assert result.endswith(TRUNCATION_MARKER)
         
         # Test with whitespace
         whitespace_text = "   Text with spaces   "
@@ -415,7 +429,8 @@ class TestAIServiceErrorHandling:
     """Test error handling in AI service."""
 
     @pytest.mark.asyncio
-    @patch("app.services.ai_service.client.chat.completions.create")
+    @patch("app.services.ai_service.client.chat.completions.create",
+            new_callable=AsyncMock)
     async def test_generate_cover_letter_rate_limit(self, mock_create):
         """Test handling rate limit errors."""
         from openai import RateLimitError
@@ -434,12 +449,15 @@ class TestAIServiceErrorHandling:
         assert "429" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    @patch("app.services.ai_service.client.chat.completions.create")
+    @patch("app.services.ai_service.client.chat.completions.create",
+            new_callable=AsyncMock)
     async def test_generate_cover_letter_timeout(self, mock_create):
         """Test handling timeout errors."""
         from openai import APITimeoutError
-        
-        mock_create.side_effect = APITimeoutError("Timeout", response=MagicMock(), body=None)
+
+        # APITimeoutError takes the failed *request*, not a response/body - it is
+        # raised when no response ever arrived
+        mock_create.side_effect = APITimeoutError(request=_fake_request())
         
         with pytest.raises(Exception) as exc_info:
             await generate_cover_letter(
@@ -453,12 +471,16 @@ class TestAIServiceErrorHandling:
         assert "504" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    @patch("app.services.ai_service.client.chat.completions.create")
+    @patch("app.services.ai_service.client.chat.completions.create",
+            new_callable=AsyncMock)
     async def test_generate_cover_letter_connection_error(self, mock_create):
         """Test handling connection errors."""
         from openai import APIConnectionError
-        
-        mock_create.side_effect = APIConnectionError("Connection error", response=MagicMock(), body=None)
+
+        # Both arguments are keyword-only on this one
+        mock_create.side_effect = APIConnectionError(
+            message="Connection error", request=_fake_request()
+        )
         
         with pytest.raises(Exception) as exc_info:
             await generate_cover_letter(
@@ -472,7 +494,8 @@ class TestAIServiceErrorHandling:
         assert "504" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    @patch("app.services.ai_service.client.chat.completions.create")
+    @patch("app.services.ai_service.client.chat.completions.create",
+            new_callable=AsyncMock)
     async def test_generate_cover_letter_status_error(self, mock_create):
         """Test handling status errors."""
         from openai import APIStatusError
@@ -498,31 +521,57 @@ class TestInputLengthLimits:
     """Test input length limits for AI service."""
 
     @pytest.mark.asyncio
-    @patch("app.services.ai_service.client.chat.completions.create")
+    @patch("app.services.ai_service.client.chat.completions.create",
+            new_callable=AsyncMock)
     async def test_job_description_truncation(self, mock_create):
         """Test that long job descriptions are truncated."""
         from app.services.ai_service import MAX_JOB_DESCRIPTION_CHARS, _truncate
-        
+
         long_description = "A" * (MAX_JOB_DESCRIPTION_CHARS + 100)
-        
-        with patch("app.services.ai_service.generate_cover_letter") as mock_func:
-            # We need to test the truncation in the router, not the service
-            pass
-        
-        # Test truncation function directly
+
         truncated = _truncate(long_description, MAX_JOB_DESCRIPTION_CHARS)
-        assert len(truncated) <= MAX_JOB_DESCRIPTION_CHARS + len("...[truncated]")
+        assert len(truncated) == MAX_JOB_DESCRIPTION_CHARS + len(TRUNCATION_MARKER)
 
     @pytest.mark.asyncio
-    @patch("app.services.ai_service.client.chat.completions.create")
+    @patch("app.services.ai_service.client.chat.completions.create",
+            new_callable=AsyncMock)
+    async def test_oversized_job_description_reaches_groq_truncated(self, mock_create):
+        """The cap has to hold on the prompt actually sent, not just in `_truncate`.
+
+        This is the assertion the original suite was reaching for with an empty
+        `with patch(...): pass` block that tested nothing.
+        """
+        from app.services.ai_service import MAX_JOB_DESCRIPTION_CHARS
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "feedback"
+        mock_create.return_value = mock_response
+
+        await generate_cover_letter(
+            job_title="Engineer",
+            company_name="Acme",
+            job_description="A" * (MAX_JOB_DESCRIPTION_CHARS * 10),
+            resume_text="Python developer",
+        )
+
+        prompt = mock_create.call_args[1]["messages"][1]["content"]
+        # Scoped to the tagged block: the surrounding prompt has its own capital As
+        section = prompt.split("<job_description>")[1].split("</job_description>")[0]
+        assert section.count("A") == MAX_JOB_DESCRIPTION_CHARS
+        assert TRUNCATION_MARKER in section
+
+    @pytest.mark.asyncio
+    @patch("app.services.ai_service.client.chat.completions.create",
+            new_callable=AsyncMock)
     async def test_resume_truncation(self, mock_create):
         """Test that long resumes are truncated."""
         from app.services.ai_service import MAX_RESUME_CHARS, _truncate
         
         long_resume = "A" * (MAX_RESUME_CHARS + 100)
-        
+
         truncated = _truncate(long_resume, MAX_RESUME_CHARS)
-        assert len(truncated) <= MAX_RESUME_CHARS + len("...[truncated]")
+        assert len(truncated) == MAX_RESUME_CHARS + len(TRUNCATION_MARKER)
 
 
 class TestCoverLetterTimestamp:

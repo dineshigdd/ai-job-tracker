@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from app.main import app
@@ -212,6 +213,78 @@ def create_special_char_jobs(db_session, test_user):
     
     db_session.commit()
     return jobs
+
+
+# --- PDF fixtures ---
+
+DEFAULT_RESUME_TEXT = "Python Django developer with 5 years of experience"
+
+
+def make_pdf(text: str = DEFAULT_RESUME_TEXT) -> bytes:
+    """Builds a real, single-page PDF whose text `pypdf` can actually extract.
+
+    The upload tests used to post a stub — `b"%PDF-1.4\\n1 0 obj\\n<<>>\\nendobj\\n
+    trailer\\n%%EOF"` — which pypdf rejects outright ("startxref not found"), and which
+    has no page or content stream to extract text from even if it parsed. Every test
+    that uploaded one got a 400 instead of exercising the endpoint.
+
+    Mocking `PdfReader` instead would leave the parse path — the part that actually
+    broke — untested, so the fixture builds a structurally valid file: catalog, page
+    tree, one page, a content stream drawing `text`, and an xref table whose byte
+    offsets are computed rather than guessed.
+
+    Keep `text` free of `(`, `)` and `\\`, which are PDF string delimiters and would
+    need escaping in the content stream.
+    """
+    content = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode("latin-1")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+        b"<< /Length %d >>\nstream\n%s\nendstream" % (len(content), content),
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % number + body + b"\nendobj\n"
+
+    # The xref table maps each object number to its byte offset, so it can only be
+    # written once every object has been laid down and its position is known
+    xref_offset = len(out)
+    out += b"xref\n0 %d\n" % (len(objects) + 1)
+    out += b"0000000000 65535 f \n"
+    for offset in offsets:
+        out += b"%010d 00000 n \n" % offset
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (
+        len(objects) + 1, xref_offset
+    )
+    return bytes(out)
+
+
+@pytest.fixture(scope="function")
+def pdf_bytes():
+    """A valid PDF resume. Byte-identical across calls, so posting it twice is a
+    genuine duplicate as far as `content_hash` is concerned."""
+    return make_pdf()
+
+
+@pytest.fixture(scope="function")
+def mock_resume_analysis():
+    """Stubs the Groq call behind `POST /resumes/analyze`.
+
+    Without this the upload tests reach the real API: with a valid key that spends
+    free-tier quota on every run, and with a dummy one they fail 502. Neither tells us
+    anything about the endpoint under test.
+    """
+    with patch(
+        "app.routers.resumes.analyze_resume", new_callable=AsyncMock
+    ) as mock_analyze:
+        mock_analyze.return_value = "Mocked AI feedback"
+        yield mock_analyze
 
 
 # Resume fixtures

@@ -5,6 +5,7 @@ enpoints in routers/resumes.py.
 """
 import io
 import pytest
+from datetime import datetime, timedelta, timezone
 from fastapi import status
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch, MagicMock
@@ -17,17 +18,15 @@ from app.schemas import ResumeSummary, ResumeDetail
 class TestResumeUploadAndAnalyze:
     """Test the POST /resumes/analyze endpoint."""
 
-    def test_upload_valid_pdf(self, client, db_session, test_user):
+    def test_upload_valid_pdf(self, client, db_session, test_user, pdf_bytes,
+                              mock_resume_analysis):
         """Test uploading a valid PDF resume."""
-        # Create a minimal valid PDF
-        pdf_content = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"
-        
         response = client.post(
             "/resumes/analyze",
-            files={"file": ("test_resume.pdf", pdf_content)},
+            files={"file": ("test_resume.pdf", pdf_bytes)},
             data={"job_description": "Python developer"}
         )
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "filename" in data
@@ -39,20 +38,21 @@ class TestResumeUploadAndAnalyze:
         assert data["resume"]["user_id"] == str(test_user.id)
         assert data["resume"]["is_active"] is True
 
-    def test_upload_without_job_description(self, client, db_session, test_user):
+    def test_upload_without_job_description(self, client, db_session, test_user,
+                                            pdf_bytes, mock_resume_analysis):
         """Test uploading a PDF without job description (optional)."""
-        pdf_content = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"
-        
         response = client.post(
             "/resumes/analyze",
-            files={"file": ("test_resume.pdf", pdf_content)},
+            files={"file": ("test_resume.pdf", pdf_bytes)},
             data={}  # No job_description
         )
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "ai_feedback" in data
         assert data["resume"]["is_active"] is True
+        # The analyser is still called, just with nothing to compare against
+        assert mock_resume_analysis.call_args[1]["target_job_description"] is None
 
     def test_upload_non_pdf_file(self, client, db_session, test_user):
         """Test uploading a non-PDF file is rejected."""
@@ -121,40 +121,41 @@ class TestResumeUploadAndAnalyze:
             assert response.status_code == status.HTTP_400_BAD_REQUEST
             assert "password" in response.json()["detail"].lower()
 
-    def test_duplicate_resume_reuses_existing(self, client, db_session, test_user):
+    def test_duplicate_resume_reuses_existing(self, client, db_session, test_user,
+                                              pdf_bytes, mock_resume_analysis):
         """Test uploading the same PDF twice reuses the existing resume."""
-        pdf_content = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"
-        
         # First upload
         response1 = client.post(
             "/resumes/analyze",
-            files={"file": ("test_resume.pdf", pdf_content)},
+            files={"file": ("test_resume.pdf", pdf_bytes)},
         )
         assert response1.status_code == status.HTTP_200_OK
         resume_id_1 = response1.json()["resume"]["id"]
-        
+
         # Second upload with same content
         response2 = client.post(
             "/resumes/analyze",
-            files={"file": ("test_resume_copy.pdf", pdf_content)},
+            files={"file": ("test_resume_copy.pdf", pdf_bytes)},
         )
         assert response2.status_code == status.HTTP_200_OK
         resume_id_2 = response2.json()["resume"]["id"]
-        
+
         # Should reuse the same resume
         assert resume_id_1 == resume_id_2
+        assert db_session.query(Resume).filter(
+            Resume.user_id == test_user.id
+        ).count() == 1
 
-    def test_resume_stored_with_correct_data(self, client, db_session, test_user):
+    def test_resume_stored_with_correct_data(self, client, db_session, test_user,
+                                             pdf_bytes, mock_resume_analysis):
         """Test that resume data is stored correctly in database."""
-        pdf_content = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"
-        
         response = client.post(
             "/resumes/analyze",
-            files={"file": ("my_resume.pdf", pdf_content)},
+            files={"file": ("my_resume.pdf", pdf_bytes)},
         )
-        
+
         assert response.status_code == status.HTTP_200_OK
-        
+
         # Verify in database
         resume = db_session.query(Resume).filter(Resume.user_id == test_user.id).first()
         assert resume is not None
@@ -162,6 +163,8 @@ class TestResumeUploadAndAnalyze:
         assert resume.is_active is True
         assert resume.content_hash is not None
         assert len(resume.content_hash) == 64  # SHA-256 hex
+        # The text really came out of the PDF, rather than the row being stored empty
+        assert "Python Django developer" in resume.extracted_text
 
 
 class TestResumeList:
@@ -178,20 +181,25 @@ class TestResumeList:
 
     def test_list_resumes_with_data(self, client, db_session, test_user):
         """Test listing resumes when user has multiple."""
-        # Create multiple resumes
+        # Timestamps are set explicitly because every row in a single commit gets the
+        # same server-side now(). The list orders by (created_at DESC, id DESC), so with
+        # identical timestamps the random UUID tiebreak decided the order and this
+        # assertion passed or failed at random.
+        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
         for i in range(3):
             resume = Resume(
                 user_id=test_user.id,
                 filename=f"resume_{i}.pdf",
                 extracted_text=f"Resume content {i}",
-                content_hash=f"hash_{i}" * 16,  # 64 chars
-                is_active=(i == 0)  # First one is active
+                content_hash=f"{i:064x}",  # 64 chars, matching the column width
+                is_active=(i == 0),  # First one is active
+                created_at=base + timedelta(hours=i),
             )
             db_session.add(resume)
         db_session.commit()
-        
+
         response = client.get("/resumes/")
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert len(data) == 3
@@ -342,7 +350,8 @@ class TestActiveResume:
 class TestStoredResumeAnalyze:
     """Test the POST /resumes/{resume_id}/analyze endpoint."""
 
-    def test_analyze_stored_resume(self, client, db_session, test_user):
+    def test_analyze_stored_resume(self, client, db_session, test_user,
+                                   mock_resume_analysis):
         """Test analyzing an already-stored resume with a job description."""
         # Create a resume
         resume = Resume(
@@ -355,19 +364,23 @@ class TestStoredResumeAnalyze:
         db_session.add(resume)
         db_session.commit()
         db_session.refresh(resume)
-        
+
         response = client.post(
             f"/resumes/{resume.id}/analyze",
             json={"job_description": "Looking for Python Django developer"}
         )
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["filename"] == "test.pdf"
         assert "ai_feedback" in data
         assert data["resume"]["id"] == str(resume.id)
+        # The point of storing the text: the stored copy is what gets re-analysed,
+        # rather than the user being asked for the PDF again
+        assert mock_resume_analysis.call_args[1]["resume_text"] == resume.extracted_text
 
-    def test_analyze_stored_resume_no_job_description(self, client, db_session, test_user):
+    def test_analyze_stored_resume_no_job_description(self, client, db_session,
+                                                      test_user, mock_resume_analysis):
         """Test analyzing a stored resume without job description."""
         resume = Resume(
             user_id=test_user.id,
@@ -379,9 +392,9 @@ class TestStoredResumeAnalyze:
         db_session.add(resume)
         db_session.commit()
         db_session.refresh(resume)
-        
+
         response = client.post(f"/resumes/{resume.id}/analyze")
-        
+
         assert response.status_code == status.HTTP_200_OK
         assert "ai_feedback" in response.json()
 
@@ -603,7 +616,8 @@ class TestResumeModelProperties:
 class TestResumeLimits:
     """Test resume storage limits."""
 
-    def test_max_resumes_per_user_limit(self, client, db_session, test_user):
+    def test_max_resumes_per_user_limit(self, client, db_session, test_user,
+                                        pdf_bytes, mock_resume_analysis):
         """Test that users cannot exceed the maximum number of resumes."""
         # Create MAX_RESUMES_PER_USER (25) resumes
         for i in range(25):
@@ -611,18 +625,20 @@ class TestResumeLimits:
                 user_id=test_user.id,
                 filename=f"resume_{i}.pdf",
                 extracted_text=f"Content {i}",
-                content_hash=f"hash_{i}" * 16,  # Ensure unique hashes
+                # Unique, and 64 chars wide like a real SHA-256 hex digest
+                content_hash=f"{i:064x}",
                 is_active=(i == 0)
             )
             db_session.add(resume)
         db_session.commit()
-        
+
         # Try to upload one more
-        pdf_content = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"
         response = client.post(
             "/resumes/analyze",
-            files={"file": ("resume_26.pdf", pdf_content)},
+            files={"file": ("resume_26.pdf", pdf_bytes)},
         )
-        
+
         assert response.status_code == status.HTTP_409_CONFLICT
         assert "limit of 25" in response.json()["detail"]
+        # Rejected before the AI is called, so a refused upload costs no quota
+        mock_resume_analysis.assert_not_called()
