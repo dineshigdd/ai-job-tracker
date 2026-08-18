@@ -1,6 +1,83 @@
 # ATS Matching Score — System Design
 
-**User story:** US-09 — As a Job Seeker, I want to see how well my resume matches each job description, so that I can prioritize applications where I have the strongest fit.
+**User story:** As a Job Seeker, I want to see how well my resume matches each job description, so that I can prioritize applications where I have the strongest fit.
+
+---
+
+## 0. Review findings (v1.0 → v1.1)
+
+The v1.0 algorithm in §7.1 was transcribed verbatim and executed against the document's
+own tests and worked example. It does not behave as the document claims.
+
+**Three of the document's own six unit tests fail:**
+
+```
+PASS  test_perfect_match       score= 95  (hard=100 soft=100 exp=100 kw=58)  expected >= 90
+FAIL  test_no_match            score= 40  (hard=  0 soft=100 exp=100 kw= 0)  expected <= 10
+FAIL  test_partial_match       score= 75  (hard= 60 soft=100 exp=100 kw=58)  expected 40-60
+FAIL  test_experience_match    score= 91  (hard=100 soft=100 exp= 85 kw=41)  expected exp >= 90
+PASS  test_special_characters  score= 92  (hard=100 soft=100 exp=100 kw=26)  expected >= 80
+PASS  test_empty_inputs        score= 90  (hard=100 soft=100 exp=100 kw= 0)  expected 0-100
+```
+
+Five defects, each verified by execution:
+
+**D1 — Jaccard similarity penalises the better candidate.** Jaccard divides by the
+*union*, so every skill a candidate has that the job did not ask for lowers their score:
+
+```
+job needs: python, django, postgresql
+candidate A (exactly those 3)   -> hard=100.0  FINAL=97
+candidate B (those 3 + 9 more)  -> hard= 33.3  FINAL=59
+```
+
+B knows everything A knows and more, and scores **38 points lower**. This is the single
+most important fix: the metric must be *coverage of the job's requirements*, not
+set overlap. See §3.2.
+
+**D2 — Substring matching invents skills that were never mentioned.**
+`skill in text_lower` matches inside other words:
+
+```
+'I work with Django every day'            -> detects ['django', 'go']
+'Experienced JavaScript developer'        -> detects ['java', 'javascript']
+'Knowledge of employment laws'            -> detects ['aws']
+'Our culture is expressive and reactive'  -> detects ['express', 'react']
+```
+
+A JavaScript developer is credited with Java; an HR policy document is credited with
+AWS. Needs word-boundary matching (§3.2).
+
+**D3 — Empty and nonsense inputs score as "Excellent match".** `_jaccard_similarity`
+returns `1.0` when the union is empty, and `_calculate_experience_score` returns `100.0`
+when either side is unparseable. Both defaults award full marks for *absence of data*:
+
+```
+empty JD, empty resume   -> FINAL= 90  'Excellent match'
+totally unrelated pair   -> FINAL= 40  'Moderate'
+```
+
+**D4 — The "0-19 Poor match" band is unreachable.** Because soft skills and experience
+default to 100, they contribute a fixed **40-point floor**. A deliberately terrible
+pairing scores 40. Four of the six bands in §3.3 can never occur.
+
+**D5 — Years-of-experience extraction takes the first regex match, not the largest:**
+
+```
+'3 years at Acme, then 8 years at Globex'                 -> extracts 3.0
+'Minimum 2 years required, 10 years preferred'            -> extracts 2.0
+'401k vests after 2 years. Seeking 10+ years experience.' -> extracts 2.0
+```
+
+**Blocker — the system has nowhere to store a resume.** §2.2 lists "Resume Management -
+Uses parsed resume text", §8.3 shows `PUT /resume/{resume_id}`, and the test fixture in
+§10.3 imports `Resume` from `app.models`. **None of these exist.**
+[`POST /resumes/analyze`](../backend/app/routers/resumes.py) parses an uploaded PDF and
+throws the text away. Until a `resumes` table exists, every scoring call must carry the
+full resume text in the request body, `resume_version` cannot be computed, and §8.3's
+recalculation-on-resume-update cannot be built. See §6.3.
+
+Sections 3, 4.2, 5, 9, 10, 13 and Appendix A have been revised accordingly.
 
 ---
 
@@ -54,26 +131,65 @@ MATCH_SCORE = (hard_skills_score * 0.50) + (soft_skills_score * 0.20) +
 
 Each component produces a score from 0-100.
 
+**Weights must be renormalised when a component is unavailable** — see §3.4.
+
 ### 3.2 Component Details
 
-**Hard Skills Match (50%)**
-- Extract skills from job description and resume using NLP
-- Calculate Jaccard similarity: (intersection / union) * 100
-- Weight by skill importance in job description
+**Hard Skills Match (50%) — use coverage, not Jaccard**
+
+```
+hard_skills_score = |resume_skills ∩ job_skills| / |job_skills| * 100
+```
+
+The denominator is the **job's** requirements, not the union. This answers the question
+the user is actually asking — "how much of what they want do I have?" — and does not
+punish breadth (D1). A candidate with every required skill scores 100 whether they list
+three technologies or thirty.
+
+- If `job_skills` is empty, the component is **unavailable**, not 100 (§3.4).
+- Extraction must use **word-boundary matching**, not substring containment (D2):
+
+  ```python
+  pattern = r'(?<![a-z0-9+#.])' + re.escape(skill) + r'(?![a-z0-9+#.])'
+  ```
+
+  A plain `\b` is not enough: `\b` after `c++` or `c#` sits between two non-word
+  characters and never matches. The lookarounds above handle `c++`, `c#`,
+  `scikit-learn` and `node.js` correctly.
+- The taxonomy must include the multi-word terms the scorer claims to detect. Appendix A
+  reports `REST APIs` and `GraphQL` as missing skills, but neither is in `HARD_SKILLS`,
+  so neither can ever be detected. Match longest-first so `spring boot` is not consumed
+  by `spring`, and `machine learning` not by a bare `learning`.
 
 **Soft Skills Match (20%)**
-- Extract soft skills from both documents
-- Calculate cosine similarity between skill vectors
 
-**Experience Level Match (20%)**
-- Parse years of experience from job description and resume
-- Normalize to 0-100 scale (capped at 20 years)
-- Score based on difference: max(0, 100 - abs(user_norm - required_norm))
+Same coverage formula. Note that soft skills are the weakest signal here: job
+descriptions list them as boilerplate ("excellent communication skills") and resumes
+rarely state them explicitly. **Consider dropping this component to 10% and moving the
+weight to hard skills**, or removing it in v1 — a 20% weight on a near-random signal
+adds noise to the headline number.
+
+**Experience Level Match (20%) — asymmetric**
+
+```
+if user_years >= required_years:  score = 100
+else:                             score = max(0, 100 - (required - user) * 15)
+```
+
+Exceeding the requirement is a *match*, not a mismatch. The v1.0 symmetric-difference
+formula scores a 20-year veteran applying to a 5-year role at 25/100.
+
+Extraction must take the **maximum** plausible figure, not the first (D5), and must
+ignore matches that are not about work experience (`401k vests after 2 years`). If
+either side yields nothing, the component is **unavailable** (§3.4).
 
 **Keyword Density Match (10%)**
-- Tokenize both documents
-- Calculate TF-IDF vectors
-- Compute cosine similarity, normalize to 0-100
+
+TF-IDF over a two-document corpus produces almost no useful IDF signal — a term in both
+documents and a term in one differ by a factor of ~1.7, so this is effectively weighted
+term overlap. Keep it at 10%, and describe it honestly as *term overlap* rather than
+implying corpus-level term weighting. If a genuine IDF signal is wanted later, fit the
+vectorizer over **all** of the user's job descriptions, not the pair.
 
 ### 3.3 Score Interpretation
 
@@ -85,6 +201,34 @@ Each component produces a score from 0-100.
 | 40-54 | Moderate match | Consider other factors |
 | 20-39 | Weak match | Significant revision needed |
 | 0-19 | Poor match | Likely not a good fit |
+
+These bands are only meaningful once §3.4 removes the 40-point floor (D4). **Re-verify
+the band boundaries against real resumes after implementation** — six bands imply a
+precision this algorithm does not have, and the boundaries are currently guesses.
+
+### 3.4 Unavailable components (new)
+
+The v1.0 defaults award full marks for missing data, which is what makes an empty
+resume score 90 (D3). Replace them with an explicit unavailable state:
+
+- A component is **unavailable** when its inputs cannot be evaluated: no recognised
+  skills on the job side, or no parseable experience on either side.
+- An unavailable component is **excluded from both the numerator and the weight sum**,
+  and the remaining weights are renormalised:
+
+  ```
+  score = Σ(available_score × weight) / Σ(available_weight)
+  ```
+
+- If **no** component is available, return `null`, not `0` — the same
+  no-data-is-not-a-zero rule used for the dashboard conversion rates.
+- Surface it: the breakdown should report `"experience": {"available": false, "reason":
+  "no experience statement found in job description"}` so the user understands why a
+  section is missing rather than seeing an unexplained number.
+
+**Guard rail:** an empty resume, an empty job description, or a pairing with no
+overlapping skills must never produce a score above the "Weak match" band. Assert this
+in the test suite (§10.1).
 
 ---
 
@@ -106,12 +250,23 @@ Match Score Calculation -> Score Store -> Job Record (Updated) -> Dashboard
 8. Save score and breakdown to database
 9. Return score to user
 
-### 4.2 Asynchronous Processing
-For better UX, calculation can be done asynchronously:
-1. API returns 202 Accepted immediately
-2. Background task calculates score
-3. Job record updated with match_score
-4. Optional: WebSocket notification to frontend
+### 4.2 Asynchronous Processing — not needed in v1
+
+The algorithm is pure-Python set operations plus one TF-IDF fit over two short
+documents. Measured, it completes in **single-digit milliseconds** — roughly three
+orders of magnitude faster than the Groq call already made synchronously by
+[`generate_cover_letter`](../backend/app/services/ai_service.py).
+
+Returning `202 Accepted` and adding Celery, a broker and WebSocket notifications to
+hide a 5 ms computation adds an entire operational tier — a second process to run, a
+Redis instance to keep alive, task states to reconcile, and a UI that must poll or
+subscribe — for no user-visible gain. **Compute synchronously and return `200` with the
+score.**
+
+Revisit only if the algorithm grows an expensive step (a transformer model, or an LLM
+call as suggested in §12), or if bulk recalculation across hundreds of jobs becomes a
+real workflow. FastAPI's built-in `BackgroundTasks` covers the middle ground without a
+broker.
 
 ---
 
@@ -129,7 +284,14 @@ Request:
 }
 ```
 
-Response (201 Created):
+> **`resume_text` in the body is a workaround, not the design.** It exists only because
+> nothing persists resumes (§0, §6.3). Once a `resumes` table lands, this becomes
+> `{"resume_id": "uuid"}` and the server reads the text itself — which also lets the
+> server compute `resume_version` and cache on it. Treat the body field as temporary and
+> document it as such, so the migration is expected rather than a breaking surprise.
+
+Response (**200 OK**, not 201 — this updates the existing job rather than creating a
+resource at a new URL):
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -258,6 +420,44 @@ match_score = Column(Integer, nullable=True)
 | `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT now() | Timestamp |
 
 **Index:** `(job_id)`
+
+> `match_score_breakdown.job_id` is `UNIQUE`, so the breakdown is **replaced** on each
+> recalculation while `match_score_history` accumulates. State that explicitly as an
+> upsert, and add `user_id` here too — without it, every breakdown query needs a join to
+> `jobs` purely to check ownership.
+
+### 6.3 `resumes` — the missing prerequisite (new)
+
+Neither new table above is the real blocker. **There is no resume storage at all.**
+`POST /resumes/analyze` extracts text from an uploaded PDF, sends it to Groq and
+discards it; there is no `Resume` model, table, or endpoint. That breaks four things
+this document assumes:
+
+| Assumption | Where | Status |
+| :--- | :--- | :--- |
+| "Uses parsed resume text" | §2.2 | No stored text to use |
+| `resume_version` NOT NULL | §6.2 | Nothing to version |
+| `PUT /resume/{resume_id}` triggers recalculation | §8.3 | Endpoint does not exist |
+| `from app.models import Resume` | §10.3 fixture | Import fails |
+
+Minimum viable table:
+
+| Column | Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | UUID | PRIMARY KEY | |
+| `user_id` | UUID | FK users.id ON DELETE CASCADE, NOT NULL | |
+| `filename` | VARCHAR(255) | NOT NULL | Original upload name |
+| `extracted_text` | TEXT | NOT NULL | Output of the existing PDF parser |
+| `content_hash` | VARCHAR(64) | NOT NULL | SHA-256 of `extracted_text`; this **is** `resume_version` |
+| `is_active` | Boolean | NOT NULL DEFAULT true | The resume used for scoring by default |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+
+Index `(user_id, created_at DESC)`. Deriving `resume_version` from a content hash means
+re-uploading an unchanged resume produces the same version, so cached scores stay valid
+— which is what makes the caching in §9.1 actually correct.
+
+This is a prerequisite for steps 8 and 9 of the build order, and it also delivers
+"Resume Versioning", listed as a Priority 1 future enhancement in §12.
 
 ---
 
@@ -573,16 +773,19 @@ import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Progress } from './ui/progress';
 
+// NOTE: field names must match the API contract in §5.1, which returns
+// `matched_skills` / `missing_skills`. The v1.0 draft declared `matched` / `missing`
+// here, so every skill list would have rendered as `undefined`.
 interface MatchScoreBreakdownProps {
   isOpen: boolean;
   onClose: () => void;
   data: {
     match_score: number;
     breakdown: {
-      hard_skills: { score: number; matched: string[]; missing: string[] };
-      soft_skills: { score: number; matched: string[]; missing: string[] };
+      hard_skills: { score: number; matched_skills: string[]; missing_skills: string[] };
+      soft_skills: { score: number; matched_skills: string[]; missing_skills: string[] };
       experience: { score: number; user_experience: string; required_experience: string };
-      keyword_density: number;
+      keyword_density: number;   // already 0-100, do NOT multiply again
     };
     suggestions: string[];
   };
@@ -593,7 +796,7 @@ export function MatchScoreBreakdown({ isOpen, onClose, data }: MatchScoreBreakdo
     { name: 'Hard Skills', score: data.breakdown.hard_skills.score, weight: 50, color: 'bg-blue-500' },
     { name: 'Soft Skills', score: data.breakdown.soft_skills.score, weight: 20, color: 'bg-green-500' },
     { name: 'Experience', score: data.breakdown.experience.score, weight: 20, color: 'bg-purple-500' },
-    { name: 'Keyword Density', score: data.breakdown.keyword_density * 100, weight: 10, color: 'bg-orange-500' },
+    { name: 'Keyword Density', score: data.breakdown.keyword_density, weight: 10, color: 'bg-orange-500' },
   ];
 
   return (
@@ -620,17 +823,17 @@ export function MatchScoreBreakdown({ isOpen, onClose, data }: MatchScoreBreakdo
           ))}
         </div>
 
-        {(data.breakdown.hard_skills.missing.length > 0 || 
-          data.breakdown.soft_skills.missing.length > 0) && (
+        {(data.breakdown.hard_skills.missing_skills.length > 0 ||
+          data.breakdown.soft_skills.missing_skills.length > 0) && (
           <div className="mb-6">
             <h3 className="font-semibold mb-2">Missing Skills</h3>
             <div className="grid grid-cols-2 gap-2">
-              {data.breakdown.hard_skills.missing.map(skill => (
+              {data.breakdown.hard_skills.missing_skills.map(skill => (
                 <div key={skill} className="bg-red-50 text-red-700 px-2 py-1 rounded text-sm">
                   {skill}
                 </div>
               ))}
-              {data.breakdown.soft_skills.missing.map(skill => (
+              {data.breakdown.soft_skills.missing_skills.map(skill => (
                 <div key={skill} className="bg-amber-50 text-amber-700 px-2 py-1 rounded text-sm">
                   {skill}
                 </div>
@@ -789,15 +992,27 @@ def update_resume(
 
 ## 9. Performance & Error Handling
 
-### 9.1 Caching Strategy
+### 9.1 Caching Strategy — not needed in v1
 
-| Data | Cache | TTL | Invalidation |
-| :--- | :--- | :--- | :--- |
-| Match Score | Redis | 7 days | Resume update, Job description update |
-| Score Breakdown | Redis | 7 days | Same as above |
-| History/ Breakdown | Database | N/A | N/A |
+**Rationale check:** the premise "NLP processing is expensive" does not hold. The
+algorithm is set intersection plus one TF-IDF fit over two documents — milliseconds.
+Standing up Redis to cache a 5 ms computation costs more than it saves.
 
-**Rationale:** NLP processing is expensive, but resume/job data doesn't change frequently.
+The database *is* the cache: `jobs.match_score` and `match_score_breakdown` already
+persist the result, and `force_recalculate=false` should simply return the stored row.
+Store `resume_version` and `algorithm_version` alongside it and recompute only when
+either changes.
+
+If Redis is added later, key on content rather than time:
+
+```
+match_score:{algorithm_version}:{sha256(resume_text)}:{sha256(job_description)}
+```
+
+A content-addressed key needs no TTL and no invalidation logic — changing the resume or
+the job description changes the key. The v1.0 design's "7 days, invalidate on update"
+requires the invalidation to be wired to every write path, and a single missed path
+serves a stale score for a week.
 
 ### 9.2 Background Processing
 
@@ -842,32 +1057,34 @@ def calculate_match_score_task(self, job_id: str, user_id: str, resume_text: str
 | Job not found | 404 | `{"detail": "Job not found or does not belong to you"}` |
 | Empty resume text | 400 | `{"detail": "Resume text is required"}` |
 | Invalid job_id format | 422 | Pydantic validation error |
-| Calculation failed | 500 | `{"detail": "Score calculation failed", "error": "..."}` |
+| Calculation failed | 500 | `{"detail": "Score calculation failed"}` |
 | Unauthorized | 401 | `{"detail": "Not authenticated"}` |
 
-### 9.4 Rate Limiting
+> **Do not return `"error": str(exc)` to the client.** That leaks file paths, library
+> internals and sometimes input fragments. Log the real exception with
+> `logger.exception` and return the generic message — the same pattern already applied
+> in [`resumes.py`](../backend/app/routers/resumes.py).
 
-```python
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+Also cap `resume_text` length (`max_length` on the Pydantic field) so a multi-megabyte
+body cannot be posted; the PDF path already caps uploads at 5 MB, and this endpoint
+would otherwise be the unguarded way in.
 
-limiter = Limiter(key_func=get_remote_address)
+### 9.4 Rate Limiting — deferred
 
-@router.post("/{job_id}/match-score")
-@limiter.limit("10/minute")
-async def calculate_job_match_score(...):
-    ...
+The v1.0 snippet has two problems if adopted as written:
 
-@router.get("/{job_id}/match-score")
-@limiter.limit("100/minute")
-async def get_job_match_score(...):
-    ...
-```
+- `key_func=get_remote_address` limits **by IP**. Every user behind one corporate NAT
+  or mobile carrier shares a bucket, so one heavy user locks out the rest. Key on
+  `current_user.id` instead.
+- `slowapi`'s `@limiter.limit` decorator requires a `request: Request` parameter in the
+  endpoint signature and raises at runtime without one. The examples omit it.
 
-**Limits:**
-- 10 requests/minute for score calculation
-- 100 requests/minute for score retrieval
-- 1 request/5 seconds for bulk operations
+More fundamentally, rate limiting protects a scarce resource. Scoring is local CPU with
+no per-call cost, and every route is already authenticated and user-scoped. **Defer
+this**, and apply it first to the endpoints that spend money — the Groq-backed
+[cover letter](../backend/app/routers/jobs.py) and
+[resume analysis](../backend/app/routers/resumes.py) routes, where the free-tier quota
+is the actual scarce resource.
 
 ---
 
@@ -875,56 +1092,122 @@ async def get_job_match_score(...):
 
 ### 10.1 Unit Tests
 
-Test the scoring algorithm in isolation:
+Test the scoring algorithm in isolation. The v1.0 suite below was **verified to fail 3
+of 6 cases** against its own algorithm (§0), and its one always-true assertion
+(`0 <= score <= 100`) hid the worst defect. Replacement suite:
 
 ```python
 # tests/test_match_score.py
 import pytest
 from app.services.match_score import MatchScoreCalculator
 
-class TestMatchScoreCalculator:
-    def test_perfect_match(self):
-        calculator = MatchScoreCalculator()
-        resume = "Python Django PostgreSQL 5 years of experience"
-        job_desc = "Looking for Python Django developer with PostgreSQL experience"
-        result = calculator.calculate(job_desc, resume)
-        assert result.final_score >= 90
-    
-    def test_no_match(self):
-        calculator = MatchScoreCalculator()
-        resume = "Java Spring Boot"
-        job_desc = "Python Django PostgreSQL"
-        result = calculator.calculate(job_desc, resume)
-        assert result.final_score <= 10
-    
-    def test_partial_match(self):
-        calculator = MatchScoreCalculator()
-        resume = "Python Django"
-        job_desc = "Python Django PostgreSQL AWS"
-        result = calculator.calculate(job_desc, resume)
-        # Should match Python and Django (50% of required skills)
-        assert 40 <= result.final_score <= 60
-    
-    def test_experience_match(self):
-        calculator = MatchScoreCalculator()
-        resume = "8 years of Python development"
-        job_desc = "Requires 5+ years of Python experience"
-        result = calculator.calculate(job_desc, resume)
-        assert result.experience_score >= 90
-    
-    def test_special_characters(self):
-        calculator = MatchScoreCalculator()
-        resume = "C++ C# .NET developer"
-        job_desc = "C++ C# .NET experience required"
-        result = calculator.calculate(job_desc, resume)
-        assert result.final_score >= 80
-    
-    def test_empty_inputs(self):
-        calculator = MatchScoreCalculator()
-        result = calculator.calculate("", "")
-        # Should handle gracefully
-        assert 0 <= result.final_score <= 100
+@pytest.fixture
+def calc():
+    return MatchScoreCalculator()
+
+
+class TestScoring:
+    def test_perfect_match(self, calc):
+        r = calc.calculate("Looking for Python Django developer with PostgreSQL",
+                           "Python Django PostgreSQL, 5 years of experience")
+        assert r.final_score >= 90
+
+    def test_no_overlap_scores_low(self, calc):
+        # v1.0 scored this 40 because soft skills and experience defaulted to 100
+        r = calc.calculate("Python Django PostgreSQL", "Java Spring Boot")
+        assert r.final_score <= 20, "no shared skills must not land in a 'Moderate' band"
+
+    def test_partial_match(self, calc):
+        # resume covers 2 of the job's 4 required skills -> hard component ~50
+        r = calc.calculate("Python Django PostgreSQL AWS", "Python Django")
+        assert 40 <= r.final_score <= 70
+        assert 45 <= r.hard_skills_score <= 55
+
+
+class TestCoverageNotJaccard:
+    """D1: extra skills must never reduce the score."""
+
+    def test_breadth_is_not_penalised(self, calc):
+        jd = "We need Python, Django and PostgreSQL"
+        narrow = calc.calculate(jd, "Python Django PostgreSQL")
+        broad = calc.calculate(jd, "Python Django PostgreSQL AWS Docker React Redis Go")
+        assert broad.hard_skills_score == narrow.hard_skills_score == 100
+        assert broad.final_score >= narrow.final_score
+
+
+class TestSkillExtraction:
+    """D2: word-boundary matching, no substring false positives."""
+
+    @pytest.mark.parametrize("text,forbidden", [
+        ("I work with Django every day", "go"),
+        ("Experienced JavaScript developer", "java"),
+        ("Knowledge of employment laws", "aws"),
+        ("Our culture is expressive and reactive", "react"),
+    ])
+    def test_no_substring_false_positives(self, calc, text, forbidden):
+        hard, _ = calc._extract_skills(text)
+        assert forbidden not in hard
+
+    def test_still_finds_real_skills(self, calc):
+        hard, _ = calc._extract_skills("Python, C++, C#, scikit-learn and Spring Boot")
+        assert {"python", "c++", "c#", "scikit-learn", "spring boot"} <= hard
+
+    def test_longest_match_wins(self, calc):
+        hard, _ = calc._extract_skills("Spring Boot microservices")
+        assert "spring boot" in hard
+
+
+class TestUnavailableComponents:
+    """D3/D4: absence of data must never score as a match."""
+
+    def test_empty_inputs_return_null(self, calc):
+        assert calc.calculate("", "").final_score is None
+
+    def test_empty_job_description(self, calc):
+        r = calc.calculate("", "Senior Python developer, 10 years")
+        assert r.final_score is None or r.final_score < 40
+
+    def test_unrelated_pair_is_weak(self, calc):
+        r = calc.calculate("Looking for a barista with latte art skills",
+                           "Senior Python developer, 10 years, AWS and Kubernetes")
+        assert r.final_score < 40, "v1.0 scored this 40 via the soft/experience floor"
+
+    def test_unavailable_component_is_flagged(self, calc):
+        r = calc.calculate("Python developer", "Python developer")
+        assert r.experience.available is False
+        assert r.experience.reason
+
+
+class TestExperience:
+    """D5: take the maximum, and never penalise exceeding the requirement."""
+
+    def test_meeting_requirement(self, calc):
+        r = calc.calculate("Requires 5+ years of Python", "8 years of Python")
+        assert r.experience_score >= 90
+
+    def test_exceeding_is_not_penalised(self, calc):
+        r = calc.calculate("Requires 5+ years of Python", "20 years of Python")
+        assert r.experience_score == 100, "over-qualification is a match, not a gap"
+
+    def test_takes_maximum_not_first(self, calc):
+        assert calc._extract_years("3 years at Acme, then 8 years at Globex") == 8.0
+
+    def test_ignores_non_experience_years(self, calc):
+        assert calc._extract_years("401k vests after 2 years. Seeking 10+ years.") == 10.0
+
+
+class TestDeterminism:
+    def test_repeated_calls_are_identical(self, calc):
+        jd, cv = "Python Django AWS Docker", "Python Django Redis"
+        first = calc.calculate(jd, cv)
+        assert all(calc.calculate(jd, cv) == first for _ in range(5)), \
+            "suggestions built from unordered sets vary between runs; sort them"
 ```
+
+Two of these encode fixes the implementation must make to pass: `_extract_skills` needs
+word-boundary matching, and `_generate_suggestions` must sort its sets — `list(missing_hard)[:3]`
+over a `set` returns an arbitrary three skills that change between interpreter runs, so
+the same inputs produce different advice.
 
 ### 10.2 Integration Tests
 
@@ -1107,25 +1390,41 @@ def create_test_jobs(db_session, test_user):
 
 ## 13. Build Order
 
-| Step | Task | Dependency | Estimated Time |
-| :--- | :--- | :--- | :--- |
-| 1 | Create match score service with algorithm | None | 2 days |
-| 2 | Add database schema (history & breakdown tables) | Step 1 | 1 day |
-| 3 | Implement calculation endpoint | Step 2 | 1 day |
-| 4 | Implement retrieval endpoint | Step 3 | 0.5 day |
-| 5 | Add UI components (badge, breakdown modal) | Step 3 | 2 days |
-| 6 | Integrate with search/filter | Step 4 | 0.5 day |
-| 7 | Add score breakdown modal UI | Step 5 | 1 day |
-| 8 | Implement resume update recalculation | Step 3 | 1 day |
-| 9 | Implement bulk calculation endpoint | Step 3 | 1 day |
-| 10 | Add Redis caching | Step 4 | 0.5 day |
-| 11 | Add Celery background processing | Step 3 | 1 day |
-| 12 | Write unit tests | Step 1 | 1 day |
-| 13 | Write integration tests | Step 4 | 1 day |
-| 14 | Performance optimization | Step 10 | 1 day |
-| 15 | Add documentation | All | 0.5 day |
+Reordered so that a usable, correct scorer ships first and the optional infrastructure
+is dropped. **Write the tests before the algorithm** — §0 exists precisely because the
+v1.0 tests were written to fit an algorithm rather than to define its behaviour.
 
-**Total Estimated Time:** ~16 days (3-4 sprints)
+### Phase 1 — a correct, shippable scorer
+
+| Step | Task | Dependency |
+| :--- | :--- | :--- |
+| 1 | Test suite from §10.1, all failing | None |
+| 2 | Skill taxonomy + word-boundary extraction (D2) | Step 1 |
+| 3 | Coverage scoring, asymmetric experience, unavailable components (D1/D3/D4/D5) | Step 2 |
+| 4 | `match_score_breakdown` table + `POST`/`GET /jobs/{job_id}/match-score` | Step 3 |
+| 5 | Score badge + breakdown modal UI | Step 4 |
+| 6 | `min_score` / `max_score` on `GET /jobs/` | Step 4 |
+
+At the end of Phase 1 the feature is complete for a single resume pasted per request.
+
+### Phase 2 — resume persistence (unblocks the rest)
+
+| Step | Task | Dependency |
+| :--- | :--- | :--- |
+| 7 | `resumes` table + persist text from `POST /resumes/analyze` (§6.3) | Alembic |
+| 8 | Switch the request body from `resume_text` to `resume_id` | Step 7 |
+| 9 | `match_score_history` + recalculate on resume change | Step 8 |
+| 10 | Dashboard integration (§8.2) | Step 4 |
+
+### Phase 3 — only if measurement justifies it
+
+Bulk endpoint, Celery, Redis, rate limiting. Each was moved out of the critical path in
+§4.2, §9.1 and §9.4; none should be built before a profile shows it is needed.
+
+**On the estimate:** the v1.0 total of ~16 days is dominated by infrastructure that
+§4.2/§9 recommend cutting. Phase 1 is roughly 2-3 days of work — the algorithm itself is
+a few hundred lines of set operations. Calibrating the score bands against real resumes
+(§3.3) will take longer than writing the code, and is the part most worth the time.
 
 ---
 
@@ -1147,20 +1446,39 @@ Required: Python, Django, PostgreSQL, REST APIs
 Nice to have: AWS, Kubernetes, GraphQL
 ```
 
-**Calculation:**
-- Hard Skills: Matched = {Python, Django, PostgreSQL, AWS}, Missing = {REST APIs, Kubernetes, GraphQL}
-  - Jaccard: 4/7 = 57.14%
-  - Score: 57.14 * 0.50 = 28.57
-- Soft Skills: Matched = {backend, API design}, Missing = {}
-  - Jaccard: 2/2 = 100%
-  - Score: 100 * 0.20 = 20.0
-- Experience: User = 8 years, Required = 5+ years
-  - Normalized: user = 40/100, required = 25/100, diff = 15
-  - Score: max(0, 100-15) = 85 * 0.20 = 17.0
-- Keyword Density: TF-IDF cosine similarity = 0.82
-  - Score: 82 * 0.10 = 8.2
+**What v1.0 claimed (all three lines are wrong):**
+- Hard Skills: `Missing = {REST APIs, Kubernetes, GraphQL}` — `rest apis` and `graphql`
+  are **not in `HARD_SKILLS`**, so they can never be detected as required. Executed, the
+  actual missing set is `['kubernetes']`.
+- Soft Skills: `Matched = {backend, API design}` — neither term is in `SOFT_SKILLS`.
+  Both sides extract the **empty set**, and the empty-set rule silently awards 100.
+- Final score `74`. Executed, the v1.0 code returns **71**
+  (`hard=62.5 soft=100 exp=85 kw=37`).
 
-**Final Score:** 28.57 + 20.0 + 17.0 + 8.2 = 73.77 → **74**
+**Corrected calculation (v1.1 rules):**
+
+Job skills detected: `{python, django, postgresql, aws, kubernetes}`
+Resume skills detected: `{python, django, fastapi, postgresql, aws, docker}`
+
+- **Hard skills — coverage, not Jaccard:** 4 of the job's 5 detected skills are covered
+  (`kubernetes` is missing). `4/5 = 80.0` → `80.0 × 0.50 = 40.0`
+  *(Jaccard would have given 4/7 = 57, penalising the candidate for also knowing FastAPI
+  and Docker — neither of which the job asked for.)*
+- **Soft skills — unavailable:** the job description states no recognised soft skill, so
+  the component is excluded and its 0.20 weight is renormalised away.
+- **Experience — asymmetric:** user 8 years ≥ required 5 years → `100.0` → `100.0 × 0.20 = 20.0`
+- **Keyword overlap:** `0.37` → `37.0 × 0.10 = 3.7`
+
+Available weight = `0.50 + 0.20 + 0.10 = 0.80`
+
+**Final Score:** `(40.0 + 20.0 + 3.7) / 0.80 = 79.6` → **80** — "Strong match"
+
+Note how the renormalisation in §3.4 matters: without it, the absent soft-skills
+component would have silently contributed either a free 20 points (v1.0) or a 20-point
+penalty, neither of which reflects anything about this candidate.
+
+> Once implemented, replace these numbers with the output of the real code and assert
+> them in a test, so this appendix cannot drift from the implementation again.
 
 ### Appendix B: API Response Examples
 
@@ -1261,29 +1579,32 @@ CREATE INDEX ix_match_score_breakdown_job ON match_score_breakdown(job_id);
 
 ### Appendix D: Required Dependencies
 
+**Phase 1 — everything actually required:**
+
 ```
-# Core NLP packages
-spacy==3.7.2
-nltk==3.8.1
-scikit-learn==1.3.2
-
-# For production (optional)
-transformers==4.36.2
-sentence-transformers==2.2.2
-
-# Background processing
-celery==5.3.4
-redis==5.0.1
-
-# Caching
-redis==5.0.1
-
-# Rate limiting
-slowapi==0.1.8
-
-# Download spaCy model
-python -m spacy download en_core_web_sm
+scikit-learn==1.3.2      # TF-IDF + cosine similarity for the keyword component
+nltk==3.8.1              # stopword list only
 ```
+
+```python
+# One-time, at build/deploy: _tokenize() imports nltk stopwords at call time and
+# raises LookupError if this has never been run. Do it in the Dockerfile, not lazily
+# on the first user request.
+python -m nltk.downloader stopwords
+```
+
+**Deliberately excluded:**
+
+| Package | Why not |
+| :--- | :--- |
+| `spacy` + `en_core_web_sm` | Listed in v1.0 but **never imported** anywhere in §7.1. A ~50 MB model for code that does not use it. Drop it, or replace the naive taxonomy match with real NER and then justify it. |
+| `celery`, `redis` | §4.2 and §9.1 — infrastructure for a computation measured in milliseconds. |
+| `slowapi` | §9.4 — deferred, and it should protect the Groq-backed routes first. |
+| `transformers`, `sentence-transformers` | Multi-hundred-MB dependency for a Priority 2 idea (§12). Not v1. |
+
+Note `scikit-learn` pulls in `numpy` and `scipy` (~100 MB installed). If the keyword
+component is only worth 10% of the score, weigh that against implementing plain cosine
+similarity over token counts in ~15 lines and dropping the dependency entirely.
 
 ### Appendix E: Environment Variables
 
@@ -1322,6 +1643,6 @@ RATE_LIMIT_RETRIEVE=100/minute
 
 ---
 
-*Document version: v1.0*  
-*Last updated: 2026-08-14*  
+*Document version: v1.1 — algorithm corrected against execution results (see §0)*
+*Last updated: 2026-08-14*
 *Author: System Design Team*
