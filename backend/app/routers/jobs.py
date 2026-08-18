@@ -54,6 +54,17 @@ def get_jobs(
         None, max_length=MAX_SEARCH_LENGTH,
         description="Case-insensitive keyword, matched against company name and job title."
     ),
+    min_score: Optional[int] = Query(
+        None, ge=0, le=100,
+        description=(
+            "Minimum ATS match score. Jobs that have never been scored are excluded, "
+            "since an unknown score is not a low one."
+        )
+    ),
+    max_score: Optional[int] = Query(
+        None, ge=0, le=100,
+        description="Maximum ATS match score. Unscored jobs are excluded."
+    ),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     sort: JobSort = Query(JobSort.NEWEST),
@@ -61,12 +72,21 @@ def get_jobs(
     current_user: User = Depends(get_current_user)
 ):
     """Fetch job application entries belonging ONLY to the authenticated user,
-    optionally filtered by status and/or keyword (US-08)."""
+    optionally filtered by status, keyword and/or match score (US-08)."""
     # The ownership filter is the base of the query; every other filter narrows it
     query = db.query(Job).filter(Job.user_id == current_user.id)
 
     if status_filter is not None:
         query = query.filter(Job.status == status_filter.value)
+
+    # Score filters (ATS-matching-scorer.md §5.4). SQL drops NULLs from both
+    # comparisons on its own, which is the behaviour we want: "not yet scored" is a
+    # different thing from "scored badly", and a user filtering for min_score=70 is
+    # asking for jobs known to be good matches.
+    if min_score is not None:
+        query = query.filter(Job.match_score >= min_score)
+    if max_score is not None:
+        query = query.filter(Job.match_score <= max_score)
 
     term = (search or "").strip()
     if term:

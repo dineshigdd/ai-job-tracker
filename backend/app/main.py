@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.database import engine
 from sqlalchemy import text
-from app.routers import jobs, users , auth , resumes , dashboard
+from app.routers import jobs, users , auth , resumes , dashboard , match_score
 
 
 # Lifespan event handler for startup and shutdown events
@@ -37,3 +37,6 @@ app.include_router(users.router)
 app.include_router(auth.router)
 app.include_router(resumes.router)
 app.include_router(dashboard.router)
+# Shares the /jobs prefix with jobs.router. No conflict: a path parameter never spans a
+# "/", so /jobs/{job_id} cannot swallow /jobs/{job_id}/match-score.
+app.include_router(match_score.router)
