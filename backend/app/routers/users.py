@@ -11,9 +11,7 @@ from app.schemas import UserCreate, UserResponse
 from app.utils import hash_password
 from app.auth import get_current_user, authenticate_user, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 
-router = APIRouter(
-    prefix="/users",
-    tags=["Users"]
+router = APIRouter(tags=["Users"]
 )
 
 # Note: Keeping registration public so new users can sign up!
@@ -37,40 +35,6 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
     return new_user
-
-# Login endpoint to obtain JWT token for authenticated users
-@router.post("/login")
-def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(), 
-    db: Session = Depends(get_db)
-):
-    """
-    OAuth2 compatible token login. 
-    Exchanges user email (passed as 'username') and password for a JWT access token.
-    """
-    user = authenticate_user(db, form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
-    )
-    
-    return {
-        "access_token": access_token, 
-        "token_type": "bearer"
-    }
-
-@router.post("/logout")
-def logout(response: UserResponse):
-    """Clears the HTTP-only authentication cookie to log the user out."""
-    response.delete_cookie(key="access_token")
-    return {"message": "Successfully logged out"}
 
 @router.get("/me", response_model=UserResponse)
 def get_current_user_profile(current_user: User = Depends(get_current_user)):
