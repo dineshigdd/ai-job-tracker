@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 interface NavbarProps {
   title?: string;
@@ -12,6 +13,16 @@ const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const navigate = useNavigate();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const { logout } = useAuth();
+
+  const handleLogout = async () => {
+        try {
+          await logout(); // Call the logout function from AuthContext  
+          navigate("/users/login", { replace: true }); // Redirect to login page after logout
+        } catch (error) {
+          console.error("Logout failed:", error);
+    }   
+  }
 
   return (
     <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
@@ -94,10 +105,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 Profile Settings
               </button>
               <button
-                onClick={() => {
-                  setIsProfileOpen(false);
-                  navigate("/users/login");
-                }}
+                onClick= {handleLogout}
                 className="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors border-t border-slate-100"
               >
                 Sign Out

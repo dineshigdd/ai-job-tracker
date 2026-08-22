@@ -37,14 +37,14 @@ const Sidebar: React.FC = () => {
       </div>
 
       {/* Sign Out Footer */}
-      <div className="p-6 border-t border-slate-100">
+      {/* <div className="p-6 border-t border-slate-100">
         <Link
           to="/users/login"
           className="w-full flex justify-center items-center py-2.5 px-4 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
         >
           Sign Out
         </Link>
-      </div>
+      </div> */}
     </aside>
   );
 };

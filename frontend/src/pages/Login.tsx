@@ -1,120 +1,89 @@
+// src/pages/Login.tsx
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SubmitEvent) => {
     e.preventDefault();
-    
-    // Basic validation check
-    if (!email || !password) {
-      setError("Please fill in all fields.");
-      return;
-    }
+    setError(null);
+    setIsSubmitting(true);
 
-    setError("");
-    // TODO: Connect this to your FastAPI backend JWT auth endpoint later
-    console.log("Logging in with:", { email, password });
-    
-    // Example navigation to dashboard post-login simulation
-    navigate("/dashboard/stats");
+    try {
+      // Calls the AuthContext login function, which sends x-www-form-urlencoded data to FastAPI
+      await login(email, password);
+      // On success, navigate to the protected jobs route
+      navigate("/dashboard/stats");
+    } catch (err: any) {
+      setError(
+        err.response?.data?.detail || "Invalid email or password. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg border border-slate-100">
-        
-        {/* Header section */}
-        <div className="text-center">
-          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-            Welcome Back
-          </h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Sign in to access your AI Job Application Tracker
-          </p>
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+      <div className="max-w-md w-full bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+        <h2 className="text-2xl font-bold text-slate-900 text-center mb-2">
+          Welcome Back
+        </h2>
+        <p className="text-sm text-slate-500 text-center mb-6">
+          Sign in to manage your job applications
+        </p>
 
-        {/* Error banner */}
         {error && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-4 text-sm text-red-700 rounded-r-lg">
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm p-3 rounded-lg mb-4">
             {error}
           </div>
         )}
 
-        {/* Form section */}
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Email Address
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Password
-              </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center">
-              <input
-                id="remember-me"
-                type="checkbox"
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
-              />
-              <label htmlFor="remember-me" className="ml-2 block text-slate-900">
-                Remember me
-              </label>
-            </div>
-
-            <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
-              Forgot password?
-            </a>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+              Email Address
+            </label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+              placeholder="you@example.com"
+            />
           </div>
 
           <div>
-            <button
-              type="submit"
-              className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
-            >
-              Sign In
-            </button>
+            <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+              placeholder="••••••••"
+            />
           </div>
-        </form>
 
-        {/* Footer link to register */}
-        <div className="text-center text-sm text-slate-600 pt-4 border-t border-slate-100">
-          Don't have an account?{" "}
-          <Link
-            to="/users/register"
-            className="font-medium text-blue-600 hover:text-blue-500"
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-lg shadow-sm transition-colors disabled:opacity-50"
           >
-            Create account
-          </Link>
-        </div>
-
+            {isSubmitting ? "Signing in..." : "Sign In"}
+          </button>
+        </form>
       </div>
     </div>
   );
