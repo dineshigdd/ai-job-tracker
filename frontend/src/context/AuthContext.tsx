@@ -1,11 +1,6 @@
 // src/context/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { apiClient } from "../api/client";
-
-interface User {
-  id: number;
-  email: string;
-}
+import { type User, loginUser, logoutUser, fetchCurrentUser } from "../api/auth";
 
 interface AuthContextType {
   user: User | null;
@@ -21,13 +16,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // 1. Verify session on app startup / page refresh
+  // 1. Session check on startup
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
-        // Calls your /users/me endpoint which relies on the HttpOnly cookie
-        const response = await apiClient.get<User>("/users/me");
-        setUser(response.data);
+        const userData = await fetchCurrentUser();
+        setUser(userData);
       } catch {
         setUser(null);
       } finally {
@@ -38,29 +32,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkAuthStatus();
   }, []);
 
-  // 2. Login method using Form Data (required by OAuth2PasswordRequestForm)
+  // 2. Login method
   const login = async (email: string, password: string) => {
-    // OAuth2PasswordRequestForm expects URLSearchParams / form-urlencoded data
-    const formData = new URLSearchParams();
-    formData.append("username", email); // Note: 'username' field holds the email
-    formData.append("password", password);
-
-    // Send login request as form data
-    await apiClient.post("/auth/login", formData, {
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-    });
-
-    // After login success & cookie setting, fetch user profile
-    const userResponse = await apiClient.get<User>("/users/me");
-    setUser(userResponse.data);
+    await loginUser(email, password);
+    const userData = await fetchCurrentUser();
+    setUser(userData);
   };
 
   // 3. Logout method
   const logout = async () => {
     try {
-      await apiClient.post("/auth/logout");
+      await logoutUser();
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
