@@ -31,8 +31,11 @@ const JobList: React.FC = () => {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 p-6 lg:p-10">
-      <h1 className="mb-6 text-2xl font-bold text-slate-900">Job Applications</h1>
+    <main className="space-y-8">
+      <header>
+        <h2 className="text-2xl font-bold text-slate-900">Job Applications</h2>
+        <p className="text-sm text-slate-500">A list of all your job applications.</p>
+      </header>    
       {jobs.length === 0 ? (
         <p className="text-slate-500">No job applications found.</p>
       ) : (

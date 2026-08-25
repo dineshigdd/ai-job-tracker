@@ -13,10 +13,7 @@ from app.auth import get_current_user  # Import JWT auth dependency
 
 from app.services.ai_service import generate_cover_letter
 
-router = APIRouter(
-    prefix="/jobs",
-    tags=["Jobs"]
-)
+router = APIRouter(tags=["Jobs"])
 
 
 class JobSort(str, Enum):

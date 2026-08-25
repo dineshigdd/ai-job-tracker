@@ -9,6 +9,7 @@ import ResumeAnalyzer from "./pages/ResumeAnalyzer";
 import Profile from "./pages/Profile";
 
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { DashboardLayout } from "./components/DashboardLayout";
 // Define your clean routing map without duplicates or self-loops
 const router = createBrowserRouter([
   {
@@ -33,21 +34,27 @@ const router = createBrowserRouter([
     element: <ProtectedRoute />,
     children: [
       {
-        path: "/dashboard/stats",
-        element: <Dashboard />,
-      },
-      {
-        path: "/jobs",
-        element: <JobList />,
-      },
-      {
-        path: "/resumes/analyze",
-        element: <ResumeAnalyzer />,
-      },
-      {
-        path: "/users/me",
-        element: <Profile />,
-      },
+          element: <DashboardLayout />,
+          children: [
+          {
+            path: "/dashboard/stats",
+            element: <Dashboard />,
+          },
+          {
+            path: "/jobs",
+            element: <JobList />,
+          },
+          {
+            path: "/resumes/analyze",
+            element: <ResumeAnalyzer />,
+          },
+          {
+            path: "/users/me",
+            element: <Profile />,
+          },
+          ]
+      }
+      
     ],
   },
 

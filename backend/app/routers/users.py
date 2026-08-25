@@ -11,8 +11,7 @@ from app.schemas import UserCreate, UserResponse
 from app.utils import hash_password
 from app.auth import get_current_user, authenticate_user, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 
-router = APIRouter(tags=["Users"]
-)
+router = APIRouter(tags=["Users"])
 
 # Note: Keeping registration public so new users can sign up!
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
