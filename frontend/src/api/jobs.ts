@@ -1,3 +1,4 @@
+import { data } from "react-router-dom";
 import { apiClient } from "./client";
 
 export interface JobApplication {
@@ -25,3 +26,22 @@ export const createJobApplication = async (data: Partial<JobApplication>): Promi
   const response = await apiClient.post<JobApplication>("/jobs/", data)
   return response.data;
 };
+
+export const updateJobApplication = async (id: string, data: Partial<JobApplication>): Promise<JobApplication> => {
+  const response = await apiClient.put<JobApplication>(`/jobs/${id}/`, data)
+  return response.data;
+}
+
+export const deleteJobApplication = async (id: string): Promise<void> => {
+  await apiClient.delete(`/jobs/${id}/`);
+} 
+
+export const getJobApplicationById = async (id: string): Promise<JobApplication> => {
+  const response = await apiClient.get<JobApplication>(`/jobs/${id}/`);
+  return response.data;
+} 
+
+export const getJobApplicationsByStatus = async (id: string): Promise<JobApplication[]> => {
+  const response = await apiClient.get<JobListResponse>(`/jobs/${id}/generate-cober-letter/`, { data });
+  return response.data.items;
+}

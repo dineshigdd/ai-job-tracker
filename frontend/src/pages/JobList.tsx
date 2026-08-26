@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { getJobApplications, type JobApplication } from "../api/jobs";
-
+import { useNavigate } from "react-router-dom";
 const JobList: React.FC = () => {
   const [jobs, setJobs] = useState<JobApplication[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchJobs = async () => {
@@ -31,11 +32,8 @@ const JobList: React.FC = () => {
   }
 
   return (
-    <main className="space-y-8">
-      <header>
-        <h2 className="text-2xl font-bold text-slate-900">Job Applications</h2>
-        <p className="text-sm text-slate-500">A list of all your job applications.</p>
-      </header>    
+    <main className="min-h-screen bg-slate-50 p-6 lg:p-10">
+      <h1 className="mb-6 text-2xl font-bold text-slate-900">Job Applications</h1>
       {jobs.length === 0 ? (
         <p className="text-slate-500">No job applications found.</p>
       ) : (
@@ -51,7 +49,9 @@ const JobList: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {jobs.map((job) => (
-                <tr key={job.id}>
+                <tr key={job.id}
+                    onClick={() => navigate(`/jobs/${job.id}`)}
+                    className="cursor-pointer hover:bg-slate-50 transition-colors duration-200">
                   <td className="px-6 py-4 font-medium text-slate-900">{job.company_name}</td>
                   <td className="px-6 py-4 text-slate-700">{job.job_title}</td>
                   <td className="px-6 py-4 text-slate-700">{job.status}</td>

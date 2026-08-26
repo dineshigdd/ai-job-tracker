@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import JobList from "./pages/JobList";
+import JobDetail from "./pages/JobDetail";
 import ResumeAnalyzer from "./pages/ResumeAnalyzer";
 import Profile from "./pages/Profile";
 
@@ -43,6 +44,10 @@ const router = createBrowserRouter([
           {
             path: "/jobs",
             element: <JobList />,
+          },
+          {
+            path: "/jobs/:id",
+            element: <JobDetail />,
           },
           {
             path: "/resumes/analyze",
