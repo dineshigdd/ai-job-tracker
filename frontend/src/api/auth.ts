@@ -2,8 +2,9 @@
 import { apiClient } from "./client";
 
 export interface User {
-  id: number;
+  id: string;
   email: string;
+  // created_at: string; to be added later
 }
 
 export const loginUser = async (email: string, password: string): Promise<void> => {
