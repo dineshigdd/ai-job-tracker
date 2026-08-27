@@ -109,27 +109,20 @@ def create_job(
     current_user: User = Depends(get_current_user)
 ):
     """Create a new job application tracking entry tied to the current user."""
-    new_job = Job(
-        user_id=current_user.id,
-        company_name=job.company_name,
-        job_title=job.job_title,
-        job_description=job.job_description,
-        status=job.status,
-        ai_cover_letter=job.ai_cover_letter,
-        match_score=job.match_score,
-        interview_date=job.interview_date
-    )
+    # Unpack Pydantic model & attach user_id
+    new_job = Job(**job.model_dump(), user_id=current_user.id) # Use job.dict() if on Pydantic v1
+    
     db.add(new_job)
-    db.flush()  # assigns new_job.id without ending the transaction
+    db.flush()  # Assigns new_job.id without ending the transaction
 
-    # First entry in this job's history. Without it the job is invisible to every
-    # dashboard conversion metric, which reads history rather than current status.
-    db.add(JobStatusEvent(
+    # Log initial status transition
+    initial_event = JobStatusEvent(
         job_id=new_job.id,
         user_id=current_user.id,
         from_status=None,
         to_status=new_job.status
-    ))
+    )
+    db.add(initial_event)
 
     db.commit()
     db.refresh(new_job)
@@ -142,11 +135,15 @@ def get_job(
     current_user: User = Depends(get_current_user)
 ):
     """Fetch a single job application by its UUID, verifying it belongs to the user."""
+    # Simply query by job_id and user_id ownership:
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
+    
     if not job:
         raise HTTPException(status_code=404, detail="Job application not found")
+        
     return job
 
+@router.patch("/{job_id}", response_model=JobResponse)
 @router.put("/{job_id}", response_model=JobResponse)
 def update_job(
     job_id: UUID, 
@@ -161,19 +158,18 @@ def update_job(
 
     previous_status = job.status
 
-    # Update only fields that were provided in the request
+    # Update only fields explicitly provided in the request
     update_data = job_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(job, key, value)
 
-    # Record the transition, but only when the status genuinely changed. A PUT that
-    # resends the same status must not fill the activity feed with no-op entries.
+    # Record history only when the status genuinely changes
     if job.status != previous_status:
         db.add(JobStatusEvent(
             job_id=job.id,
             user_id=current_user.id,
-            from_status=previous_status,
-            to_status=job.status
+            from_status=str(previous_status) if previous_status else None,
+            to_status=str(job.status) if hasattr(job.status, "value") else job.status
         ))
 
     db.commit()

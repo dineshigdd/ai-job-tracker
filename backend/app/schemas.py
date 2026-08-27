@@ -37,6 +37,16 @@ class JobBase(BaseModel):
 class JobCreate(JobBase):
     pass
 
+class JobStatusEventResponse(BaseModel):
+    id: UUID
+    job_id: UUID
+    from_status: Optional[str] = None
+    to_status: str
+    changed_at: datetime
+
+    class Config:
+        from_attributes = True
+
 class JobUpdate(BaseModel):
     company_name: Optional[str] = None
     job_title: Optional[str] = None
@@ -53,6 +63,7 @@ class JobResponse(JobBase):
     cover_letter_generated_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    status_events: List[JobStatusEventResponse] = []
 
     class Config:
         from_attributes = True
