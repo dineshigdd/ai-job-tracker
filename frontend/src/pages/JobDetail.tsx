@@ -3,18 +3,25 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { apiClient } from "../api/client";
 
-// Matches your FastAPI backend schema exactly
+interface StatusEvent {
+  id: string;
+  from_status?: string | null;
+  to_status: string;
+  changed_at: string;
+}
+
 interface JobDetailData {
   id: number;
   company_name: string;
   job_title: string;
   job_description?: string | null;
-  status: string; // JobStatus Enum on backend
+  status: string;
+  status_events?: StatusEvent[];
   ai_cover_letter?: string | null;
   match_score?: number | null;
   interview_date?: string | null;
   created_at?: string;
-  updated_at?: string;
+  updated_at?: string;  
 }
 
 const JobDetail: React.FC = () => {
@@ -28,12 +35,13 @@ const JobDetail: React.FC = () => {
   const [isGeneratingCoverLetter, setIsGeneratingCoverLetter] = useState<boolean>(false);
   const [isCalculatingScore, setIsCalculatingScore] = useState<boolean>(false);
 
-  // Fetch job details on mount
+  // Fetch job details on load
   useEffect(() => {
     const fetchJobDetail = async () => {
       try {
-        const response = await apiClient.get<JobDetailData>(`/jobs/${id}`);       
+        const response = await apiClient.get<JobDetailData>(`/jobs/${id}`);
         setJob(response.data);
+        console.log( response.data )
         setSelectedStatus(response.data.status);
       } catch (error) {
         console.error("Failed to load job details:", error);
@@ -45,7 +53,7 @@ const JobDetail: React.FC = () => {
     fetchJobDetail();
   }, [id]);
 
-  // Handle status update (matches backend JobStatus enum)
+  // Handle status update
   const handleSaveStatus = async () => {
     if (!job) return;
     setIsUpdatingStatus(true);
@@ -61,12 +69,11 @@ const JobDetail: React.FC = () => {
     }
   };
 
-  // Trigger Cover Letter Generation -> updates ai_cover_letter
+  // Trigger Cover Letter Generation
   const handleGenerateCoverLetter = async () => {
     setIsGeneratingCoverLetter(true);
     try {
       const response = await apiClient.post(`/jobs/${id}/generate-cover-letter`);
-      // Assuming response contains generated cover letter string/data
       const generatedLetter = response.data.ai_cover_letter || response.data.cover_letter;
       setJob((prev) => (prev ? { ...prev, ai_cover_letter: generatedLetter } : null));
     } catch (error) {
@@ -76,7 +83,7 @@ const JobDetail: React.FC = () => {
     }
   };
 
-  // Trigger Match Score Calculation -> updates match_score
+  // Trigger Match Score Calculation
   const handleCalculateMatchScore = async () => {
     setIsCalculatingScore(true);
     try {
@@ -102,19 +109,46 @@ const JobDetail: React.FC = () => {
     }
   };
 
-  if (isLoading) {
-    return <div className="p-8 text-center text-slate-500 font-medium">Loading job details...</div>;
-  }
+ // Helper to render Status History
+  const renderStatusHistory = () => {
+    if (!job?.status_events || job.status_events.length === 0) {
+      return <span>Wishlist &rarr; {job?.status}</span>;
+    }
 
-  if (!job) {
     return (
-      <div className="p-8 text-center space-y-4">
-        <p className="text-slate-600 font-medium">Job not found.</p>
-        <Link to="/jobs" className="text-blue-600 hover:underline inline-block">
-          ← Back to Jobs
-        </Link>
-      </div>
+      <span>
+        {job.status_events.map((event, idx) => (
+          <React.Fragment key={event.id || idx}>
+            {idx > 0 && " → "}
+            <span className="font-semibold text-slate-800">{event.to_status}</span>
+            <span className="text-slate-500">
+              {" "}
+              ({new Date(event.changed_at).toLocaleDateString()})
+            </span>
+          </React.Fragment>
+        ))}
+      </span>
     );
+  };
+
+    if (isLoading) {
+      return (
+        <div className="p-8 text-center text-slate-500 font-medium">
+          Loading job details...
+        </div>
+      );
+    }
+
+    // ✅ CORRECT SYNTAX: standard !job check (No question mark!)
+    if (!job) {
+      return (
+        <div className="p-8 text-center space-y-4">
+          <p className="text-slate-600 font-medium">Job not found.</p>
+          <Link to="/jobs" className="text-blue-600 hover:underline inline-block">
+            ← Back to Jobs
+          </Link>
+        </div>
+      );
   }
 
   return (
@@ -173,7 +207,7 @@ const JobDetail: React.FC = () => {
         </p>
       </div>
 
-      {/* Application Dates */}
+      {/* Application Details */}
       <div>
         <h3 className="text-lg font-bold text-slate-900 mb-3">Application Details:</h3>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-2 text-sm text-slate-700">
@@ -248,11 +282,21 @@ const JobDetail: React.FC = () => {
         </div>
       </div>
 
+      {/* 📍 Status History Section (Directly before Footer) */}
+      <div>
+        <h3 className="text-lg font-bold text-slate-900 mb-3">Status History:</h3>
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-sm text-slate-700">
+          {renderStatusHistory()}
+        </div>
+      </div>
+
       {/* Action Footer */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-center space-x-6 text-sm font-semibold text-blue-600">
+        <button className="hover:underline">[ Edit ]</button>
         <button onClick={handleDeleteJob} className="text-rose-600 hover:underline">
-          [ Delete Application ]
+          [ Delete ]
         </button>
+        <button className="hover:underline">[ Duplicate ]</button>
       </div>
     </div>
   );
