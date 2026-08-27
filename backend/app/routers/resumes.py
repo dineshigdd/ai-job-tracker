@@ -18,10 +18,7 @@ from app.services.ai_service import analyze_resume
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(
-    prefix="/resumes",
-    tags=["Resumes"]
-)
+router = APIRouter(tags=["Resumes"])
 
 # Resumes are a couple of pages; anything larger is a mistake or an attack.
 # The whole upload is held in memory, so this cap matters.
