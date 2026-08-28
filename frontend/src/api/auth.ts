@@ -1,11 +1,7 @@
 // src/api/auth.ts
 import { apiClient } from "./client";
+import type { User } from "../types/auth";
 
-export interface User {
-  id: string;
-  email: string;
-  // created_at: string; to be added later
-}
 
 export const loginUser = async (email: string, password: string): Promise<void> => {
   const formData = new URLSearchParams();

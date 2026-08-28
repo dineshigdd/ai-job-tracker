@@ -2,18 +2,12 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-interface NavbarProps {
-  title?: string;
-  userEmail?: string;
-}
 
-const Navbar: React.FC<NavbarProps> = ({
-  title = "",
-  userEmail = "user@example.com",
-}) => {
+
+const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
 
   const handleLogout = async () => {
         try {
@@ -43,7 +37,7 @@ const Navbar: React.FC<NavbarProps> = ({
 
         {/* Page Title */}
         <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-          {title}
+          { user?.email }
         </h1>
       </div>
 
@@ -58,7 +52,7 @@ const Navbar: React.FC<NavbarProps> = ({
           >
             {/* Circle Avatar with Initials */}
             <div className="w-9 h-9 bg-slate-900 text-white rounded-full flex items-center justify-center font-semibold text-xs border border-slate-200">
-              {userEmail.substring(0, 2).toUpperCase()}
+              {user?.email?.substring(0, 2).toUpperCase()}
             </div>
             {/* Dropdown Arrow Indicator */}
             <svg
@@ -84,7 +78,7 @@ const Navbar: React.FC<NavbarProps> = ({
               <div className="px-4 py-3 border-b border-slate-100">
                 <p className="text-xs text-slate-400 font-medium">Signed in as</p>
                 <p className="text-sm font-semibold text-slate-800 truncate">
-                  {userEmail}
+                  {user?.email}
                 </p>
               </div>
               <button

@@ -1,6 +1,7 @@
 // src/context/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { type User, loginUser, logoutUser, fetchCurrentUser } from "../api/auth";
+import { loginUser, logoutUser, fetchCurrentUser } from "../api/auth";
+import { type User } from "../types/auth";
 
 interface AuthContextType {
   user: User | null;
