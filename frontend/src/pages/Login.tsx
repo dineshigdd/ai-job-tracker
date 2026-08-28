@@ -1,6 +1,6 @@
 // src/pages/Login.tsx
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const Login: React.FC = () => {
@@ -83,6 +83,17 @@ const Login: React.FC = () => {
           >
             {isSubmitting ? "Signing in..." : "Sign In"}
           </button>
+         
+         {/* Registration Redirect Link */}
+          <div className="mt-4 text-center text-sm text-slate-600">
+            No account?{" "}
+            <Link 
+              to="/users/register"
+              className="text-blue-600 hover:text-blue-800 font-semibold hover:underline"
+            >
+              Create one
+            </Link>
+          </div>
         </form>
       </div>
     </div>
