@@ -4,7 +4,6 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import * as JobAPI from "../api/jobs";
 import { type JobResponse, type JobStatus, STATUS_ORDER } from '../types/job';
 
-
 const JobDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -133,11 +132,18 @@ const JobDetail: React.FC = () => {
         </Link>
       </div>
 
-      {/* Title Card */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+      {/* Title Card with Edit Action */}
+      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">
           {job.company_name.toUpperCase()} - {job.job_title}
         </h1>
+        {/* Top Edit Button */}
+        <button
+          onClick={() => navigate(`/jobs/${id}/edit`)}
+          className="px-4 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-sm font-semibold transition"
+        >
+          [ Edit Job ]
+        </button>
       </div>
 
       {/* Status Bar */}
@@ -271,6 +277,13 @@ const JobDetail: React.FC = () => {
 
       {/* Action Footer */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-center space-x-6 text-sm font-semibold text-blue-600">
+        <button
+          onClick={() => navigate(`/jobs/${id}/edit`)}
+          className="hover:underline"
+        >
+          [ Edit Application ]
+        </button>
+        <span className="text-slate-300">|</span>
         <button
           onClick={handleDeleteJob}
           className="text-rose-600 hover:underline"

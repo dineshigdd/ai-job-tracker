@@ -6,6 +6,7 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import JobList from "./pages/JobList";
 import JobDetail from "./pages/JobDetail";
+import JobForm from "./pages/JobForm";
 import ResumeAnalyzer from "./pages/ResumeAnalyzer";
 import Profile from "./pages/Profile";
 
@@ -49,6 +50,14 @@ const router = createBrowserRouter([
             path: "/jobs/:id",
             element: <JobDetail />,
           },
+          {
+            path: "/jobs/new",
+            element: <JobForm />,
+          },
+          {
+            path: "/jobs/:id/edit",
+            element: <JobForm />,
+          },          
           {
             path: "/resumes/analyze",
             element: <ResumeAnalyzer />,

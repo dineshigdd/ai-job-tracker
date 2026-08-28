@@ -48,15 +48,7 @@ const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Right: Actions & User Avatar */}
-      <div className="flex items-center space-x-4">
-        {/* "+ Add Job" Primary Button */}
-        <button
-          onClick={() => navigate("/jobs")}
-          className="flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors"
-        >
-          <span className="text-base font-bold">+</span>
-          <span>Add Job</span>
-        </button>
+      <div className="flex items-center space-x-4">      
 
         {/* User Profile Menu */}
         <div className="relative">
