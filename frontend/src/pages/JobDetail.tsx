@@ -1,48 +1,27 @@
 // src/pages/JobDetail.tsx
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { apiClient } from "../api/client";
-
-interface StatusEvent {
-  id: string;
-  from_status?: string | null;
-  to_status: string;
-  changed_at: string;
-}
-
-interface JobDetailData {
-  id: number;
-  company_name: string;
-  job_title: string;
-  job_description?: string | null;
-  status: string;
-  status_events?: StatusEvent[];
-  ai_cover_letter?: string | null;
-  match_score?: number | null;
-  interview_date?: string | null;
-  created_at?: string;
-  updated_at?: string;  
-}
+import * as JobAPI from "../api/jobs";
+import { type JobResponse, type JobStatus, STATUS_ORDER } from "../api/jobs";
 
 const JobDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [job, setJob] = useState<JobDetailData | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState<string>("");
+  const [job, setJob] = useState<JobResponse | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<JobStatus>("Wishlist");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<boolean>(false);
   const [isGeneratingCoverLetter, setIsGeneratingCoverLetter] = useState<boolean>(false);
-  const [isCalculatingScore, setIsCalculatingScore] = useState<boolean>(false);
 
   // Fetch job details on load
   useEffect(() => {
     const fetchJobDetail = async () => {
+      if (!id) return;
       try {
-        const response = await apiClient.get<JobDetailData>(`/jobs/${id}`);
-        setJob(response.data);
-        console.log( response.data )
-        setSelectedStatus(response.data.status);
+        const data = await JobAPI.getJobApplicationById(id);
+        setJob(data);
+        setSelectedStatus(data.status);
       } catch (error) {
         console.error("Failed to load job details:", error);
       } finally {
@@ -53,13 +32,15 @@ const JobDetail: React.FC = () => {
     fetchJobDetail();
   }, [id]);
 
-  // Handle status update
+  // Handle status update using JobAPI.updateJobApplication
   const handleSaveStatus = async () => {
-    if (!job) return;
+    if (!id || !job) return;
     setIsUpdatingStatus(true);
     try {
-      await apiClient.patch(`/jobs/${id}`, { status: selectedStatus });
-      setJob((prev) => (prev ? { ...prev, status: selectedStatus } : null));
+      const updatedJob = await JobAPI.updateJobApplication(id, {
+        status: selectedStatus,
+      });
+      setJob(updatedJob);
       alert("Status updated successfully!");
     } catch (error) {
       console.error("Failed to update status:", error);
@@ -69,47 +50,36 @@ const JobDetail: React.FC = () => {
     }
   };
 
-  // Trigger Cover Letter Generation
+  // Trigger Cover Letter Generation using JobAPI.generateCoverLetter
   const handleGenerateCoverLetter = async () => {
+    if (!id) return;
     setIsGeneratingCoverLetter(true);
     try {
-      const response = await apiClient.post(`/jobs/${id}/generate-cover-letter`);
-      const generatedLetter = response.data.ai_cover_letter || response.data.cover_letter;
-      setJob((prev) => (prev ? { ...prev, ai_cover_letter: generatedLetter } : null));
+      const updatedJob = await JobAPI.generateCoverLetter(id);
+      setJob(updatedJob);
     } catch (error) {
       console.error("Failed to generate cover letter:", error);
+      alert("Failed to generate cover letter. Ensure a job description exists.");
     } finally {
       setIsGeneratingCoverLetter(false);
     }
   };
 
-  // Trigger Match Score Calculation
-  const handleCalculateMatchScore = async () => {
-    setIsCalculatingScore(true);
-    try {
-      const response = await apiClient.post(`/jobs/${id}/match-score`);
-      const score = response.data.match_score ?? response.data.score;
-      setJob((prev) => (prev ? { ...prev, match_score: score } : null));
-    } catch (error) {
-      console.error("Failed to calculate match score:", error);
-    } finally {
-      setIsCalculatingScore(false);
-    }
-  };
-
-  // Delete Job
+  // Delete Job using JobAPI.deleteJobApplication
   const handleDeleteJob = async () => {
+    if (!id) return;
     if (window.confirm("Are you sure you want to delete this job application?")) {
       try {
-        await apiClient.delete(`/jobs/${id}`);
+        await JobAPI.deleteJobApplication(id);
         navigate("/jobs");
       } catch (error) {
         console.error("Failed to delete job:", error);
+        alert("Failed to delete the job application.");
       }
     }
   };
 
- // Helper to render Status History
+  // Helper to render Status History
   const renderStatusHistory = () => {
     if (!job?.status_events || job.status_events.length === 0) {
       return <span>Wishlist &rarr; {job?.status}</span>;
@@ -131,24 +101,23 @@ const JobDetail: React.FC = () => {
     );
   };
 
-    if (isLoading) {
-      return (
-        <div className="p-8 text-center text-slate-500 font-medium">
-          Loading job details...
-        </div>
-      );
-    }
+  if (isLoading) {
+    return (
+      <div className="p-8 text-center text-slate-500 font-medium">
+        Loading job details...
+      </div>
+    );
+  }
 
-    // ✅ CORRECT SYNTAX: standard !job check (No question mark!)
-    if (!job) {
-      return (
-        <div className="p-8 text-center space-y-4">
-          <p className="text-slate-600 font-medium">Job not found.</p>
-          <Link to="/jobs" className="text-blue-600 hover:underline inline-block">
-            ← Back to Jobs
-          </Link>
-        </div>
-      );
+  if (!job) {
+    return (
+      <div className="p-8 text-center space-y-4">
+        <p className="text-slate-600 font-medium">Job not found.</p>
+        <Link to="/jobs" className="text-blue-600 hover:underline inline-block">
+          ← Back to Jobs
+        </Link>
+      </div>
+    );
   }
 
   return (
@@ -175,28 +144,34 @@ const JobDetail: React.FC = () => {
         <span className="font-semibold text-slate-700">Status:</span>
         <select
           value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value)}
+          onChange={(e) => setSelectedStatus(e.target.value as JobStatus)}
           className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-slate-50 text-emerald-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="WISHLIST">Wishlist</option>
-          <option value="APPLIED">Applied</option>
-          <option value="INTERVIEWING">Interviewing</option>
-          <option value="OFFER">Offer</option>
-          <option value="REJECTED">Rejected</option>
+          {STATUS_ORDER.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
         </select>
         <button
           onClick={handleSaveStatus}
           disabled={isUpdatingStatus}
           className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50"
         >
-          [ Save ]
+          {isUpdatingStatus ? "Saving..." : "[ Save ]"}
         </button>
       </div>
 
       {/* Company & Job Details Overview */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-2">
-        <p><span className="font-semibold text-slate-700">Company:</span> {job.company_name}</p>
-        <p><span className="font-semibold text-slate-700">Job Title:</span> {job.job_title}</p>
+        <p>
+          <span className="font-semibold text-slate-700">Company:</span>{" "}
+          {job.company_name}
+        </p>
+        <p>
+          <span className="font-semibold text-slate-700">Job Title:</span>{" "}
+          {job.job_title}
+        </p>
       </div>
 
       {/* Job Description */}
@@ -209,7 +184,9 @@ const JobDetail: React.FC = () => {
 
       {/* Application Details */}
       <div>
-        <h3 className="text-lg font-bold text-slate-900 mb-3">Application Details:</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-3">
+          Application Details:
+        </h3>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-2 text-sm text-slate-700">
           <p>
             <span className="font-semibold">Interview Date:</span>{" "}
@@ -239,7 +216,11 @@ const JobDetail: React.FC = () => {
                 disabled={isGeneratingCoverLetter}
                 className="text-sm font-semibold text-blue-600 hover:underline disabled:opacity-50"
               >
-                {job.ai_cover_letter ? "[ Regenerate ]" : "[ Generate Cover Letter ]"}
+                {isGeneratingCoverLetter
+                  ? "[ Generating... ]"
+                  : job.ai_cover_letter
+                  ? "[ Regenerate ]"
+                  : "[ Generate Cover Letter ]"}
               </button>
             </div>
 
@@ -248,7 +229,9 @@ const JobDetail: React.FC = () => {
                 {job.ai_cover_letter}
               </div>
             ) : (
-              <p className="text-xs text-slate-500">No cover letter generated yet.</p>
+              <p className="text-xs text-slate-500">
+                No cover letter generated yet.
+              </p>
             )}
           </div>
 
@@ -258,15 +241,6 @@ const JobDetail: React.FC = () => {
               <span className="font-bold text-slate-800 flex items-center space-x-2">
                 <span>🎯</span> <span>Match Score</span>
               </span>
-              <button
-                onClick={handleCalculateMatchScore}
-                disabled={isCalculatingScore}
-                className="text-sm font-semibold text-blue-600 hover:underline disabled:opacity-50"
-              >
-                {job.match_score !== null && job.match_score !== undefined
-                  ? "[ Recalculate ]"
-                  : "[ Calculate ]"}
-              </button>
             </div>
 
             {job.match_score !== null && job.match_score !== undefined ? (
@@ -276,15 +250,19 @@ const JobDetail: React.FC = () => {
                 </span>
               </div>
             ) : (
-              <p className="text-xs text-slate-500">Calculate score to compare against your resume.</p>
+              <p className="text-xs text-slate-500">
+                No match score calculated yet.
+              </p>
             )}
           </div>
         </div>
       </div>
 
-      {/* 📍 Status History Section (Directly before Footer) */}
+      {/* Status History Section */}
       <div>
-        <h3 className="text-lg font-bold text-slate-900 mb-3">Status History:</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-3">
+          Status History:
+        </h3>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-sm text-slate-700">
           {renderStatusHistory()}
         </div>
@@ -292,11 +270,12 @@ const JobDetail: React.FC = () => {
 
       {/* Action Footer */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-center space-x-6 text-sm font-semibold text-blue-600">
-        <button className="hover:underline">[ Edit ]</button>
-        <button onClick={handleDeleteJob} className="text-rose-600 hover:underline">
+        <button
+          onClick={handleDeleteJob}
+          className="text-rose-600 hover:underline"
+        >
           [ Delete ]
         </button>
-        <button className="hover:underline">[ Duplicate ]</button>
       </div>
     </div>
   );

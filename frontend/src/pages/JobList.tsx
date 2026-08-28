@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { getJobApplications, type JobApplication } from "../api/jobs";
+import { getJobApplications, type JobResponse } from "../api/jobs";
 import { useNavigate } from "react-router-dom";
 const JobList: React.FC = () => {
-  const [jobs, setJobs] = useState<JobApplication[]>([]);
+  const [jobs, setJobs] = useState<JobResponse[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
