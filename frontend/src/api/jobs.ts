@@ -1,92 +1,12 @@
 import { apiClient } from "./client";
+import type { 
+      JobCreate, 
+      JobUpdate, 
+      JobResponse, 
+      JobListResponse, 
+      GetJobsParams 
+} from "../types/job";
 
-// --- ENUMS & TYPES ---
-
-export type JobStatus = 
-  | "Wishlist" 
-  | "Applied" 
-  | "Interviewing" 
-  | "Offer" 
-  | "Rejected";
-
-export const STATUS_ORDER: JobStatus[] = [
-  "Wishlist",
-  "Applied",
-  "Interviewing",
-  "Offer",
-  "Rejected",
-];
-
-export type JobSort = "newest" | "oldest" | "company" | "score_desc";
-
-// --- INTERFACES MATCHING PYDANTIC SCHEMAS ---
-
-// Matches Python `JobStatusEventResponse`
-export interface JobStatusEventResponse {
-  id: string; // UUID string
-  job_id: string; // UUID string
-  from_status: string | null;
-  to_status: string;
-  changed_at: string; // ISO DateTime string
-}
-
-// Matches Python `JobCreate`
-export interface JobCreate {
-  company_name: string;
-  job_title: string;
-  job_description?: string | null;
-  status?: JobStatus;
-  ai_cover_letter?: string | null;
-  match_score?: number | null;
-  interview_date?: string | null; // ISO DateTime string
-}
-
-// Matches Python `JobUpdate`
-export interface JobUpdate {
-  company_name?: string | null;
-  job_title?: string | null;
-  job_description?: string | null;
-  status?: JobStatus | null;
-  ai_cover_letter?: string | null;
-  match_score?: number | null;
-  interview_date?: string | null; // ISO DateTime string
-}
-
-// Matches Python `JobResponse`
-export interface JobResponse {
-  id: string; // UUID string
-  user_id: string; // UUID string
-  company_name: string;
-  job_title: string;
-  job_description: string | null;
-  status: JobStatus;
-  ai_cover_letter: string | null;
-  match_score: number | null;
-  interview_date: string | null; // ISO DateTime string
-  cover_letter_generated_at: string | null; // ISO DateTime string
-  created_at: string; // ISO DateTime string
-  updated_at: string; // ISO DateTime string
-  status_events: JobStatusEventResponse[];
-}
-
-// Matches Python `JobListResponse` (Paginated envelope for GET /jobs/)
-export interface JobListResponse {
-  items: JobResponse[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
-// Query parameters for GET /jobs/ matching router filters
-export interface GetJobsParams {
-  status?: JobStatus;
-  search?: string;
-  min_score?: number;
-  max_score?: number;
-  limit?: number;
-  offset?: number;
-  sort?: JobSort;
-}
 
 // --- API FUNCTIONS ---
 

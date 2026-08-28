@@ -2,7 +2,8 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import * as JobAPI from "../api/jobs";
-import { type JobResponse, type JobStatus, STATUS_ORDER } from "../api/jobs";
+import { type JobResponse, type JobStatus, STATUS_ORDER } from '../types/job';
+
 
 const JobDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();

@@ -11,40 +11,44 @@ import {
 } from "lucide-react";
 
 import * as resumeApi from "../api/resume";
+import { 
+  ResumeSummary, 
+  ResumeAnalysisResponse 
+} from "../types/resume";
 
-interface StoredResume {
-  id: string;
-  filename: string;
-  is_active: boolean;
-  content_hash: string;
-  extracted_text_length: number;
-}
+// interface StoredResume {
+//   id: string;
+//   filename: string;
+//   is_active: boolean;
+//   content_hash: string;
+//   extracted_text_length: number;
+// }
 
-interface KeyFinding {
-  text: string;
-  matched: boolean;
-}
+// interface KeyFinding {
+//   text: string;
+//   matched: boolean;
+// }
 
-interface AnalysisResult {
-  filename?: string;
-  ai_feedback?: string;
-  match_score?: number;
-  assessment?: string;
-  key_findings?: KeyFinding[];
-  suggestions?: string[];
-}
+// interface AnalysisResult {
+//   filename?: string;
+//   ai_feedback?: string;
+//   match_score?: number;
+//   assessment?: string;
+//   key_findings?: KeyFinding[];
+//   suggestions?: string[];
+// }
 
 export const ResumeAnalyzer: React.FC = () => {
   // State: Inputs
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [storedResumes, setStoredResumes] = useState<StoredResume[]>([]);
+  const [storedResumes, setStoredResumes] = useState<ResumeSummary[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>("");
   const [jobDescription, setJobDescription] = useState<string>("");
   const [selectedTrackedJob, setSelectedTrackedJob] = useState<string>("");
 
   // State: Operations & Results
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<ResumeAnalysisResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -139,10 +143,12 @@ export const ResumeAnalyzer: React.FC = () => {
         return;
       }
 
-      const data = response
+      const data = response;
+      // 2. Spread `data` so required fields like `resume` and `extracted_text_length` are included
       setAnalysisResult({
-        filename: data.filename || data.resume?.filename,
-        ai_feedback: data.ai_feedback,
+        ...data,
+        filename: data.filename || data.resume?.filename || "Resume.pdf",
+        ai_feedback: data.ai_feedback || "",
         match_score: data.match_score ?? 85,
         assessment: (data.match_score ?? 85) >= 80 ? "Excellent Match" : "Good Match",
         key_findings: data.key_findings || [

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { getJobApplications, type JobResponse } from "../api/jobs";
+import { getJobApplications } from "../api/jobs";
+import { type JobResponse } from "../types/job";
 import { useNavigate } from "react-router-dom";
 const JobList: React.FC = () => {
   const [jobs, setJobs] = useState<JobResponse[]>([]);
