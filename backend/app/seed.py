@@ -238,16 +238,24 @@ def seed_database():
     try:
         # 3. Create sample users
         print("Creating sample users...")
+        # 3. Create sample users
+        print("Creating sample users...")
         user1 = User(
+            first_name="Alex",
+            last_name="Developer",
             email="developer@example.com",
             hashed_password=hash_password("password123")
         )
         user2 = User(
+            first_name="Priya",
+            last_name="Applicant",
             email="applicant@example.com",
             hashed_password=hash_password("securepassword")
         )
         # Deliberately left with no jobs, so the dashboard's empty state is testable
         user3 = User(
+            first_name="Sam",
+            last_name="Newcomer",
             email="newcomer@example.com",
             hashed_password=hash_password("password123")
         )

@@ -9,10 +9,19 @@ from app.models import JobStatus
 
 class UserBase(BaseModel):
     email: EmailStr
+    first_name: str
+    last_name: str
 
 class UserCreate(UserBase):
     password: str
 
+# Schema for updating user profile
+class UserUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
+    
 class UserResponse(UserBase):
     id: UUID
     created_at: datetime
