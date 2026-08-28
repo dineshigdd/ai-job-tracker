@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import * as resumeApi from "../api/resume";
-import { 
+import type { 
   ResumeSummary, 
   ResumeAnalysisResponse 
 } from "../types/resume";
