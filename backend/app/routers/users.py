@@ -13,8 +13,8 @@ from app.auth import get_current_user, authenticate_user, create_access_token, A
 
 router = APIRouter(tags=["Users"])
 
-# Note: Keeping registration public so new users can sign up!
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
     """Register a new user account with a securely hashed password."""
     existing_user = db.query(User).filter(User.email == user.email).first()
