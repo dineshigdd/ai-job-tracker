@@ -1,7 +1,6 @@
 import { apiClient } from "./client";
 import { type User } from "../types/auth";
 
-
 export interface RegisterPayload {
   first_name: string;
   last_name: string;
@@ -9,22 +8,29 @@ export interface RegisterPayload {
   password: string;
 }
 
-//POST /users/register
+// Separate payload interface for updates (makes optional fields explicit)
+export interface UpdateUserPayload {
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  password?: string;
+}
+
+// POST /users/register
 export const registerUser = async (data: RegisterPayload): Promise<User> => {
-  // Make sure the endpoint path matches your FastAPI route definition!
   const response = await apiClient.post<User>("/users/register", data);
   return response.data;
-}
+};
 
 // GET /users/me
 export const getCurrentUserProfile = async (): Promise<User> => {
-  const response = await apiClient.get(`/users/me`);
+  const response = await apiClient.get<User>(`/users/me`);
   return response.data;
 };
 
 // PUT /users/me
-export const updateUserProfile = async (data: Partial<User> & { password?: string }): Promise<User> => {
-  const response = await apiClient.put(`/users/me`, data);
+export const updateUserProfile = async (data: UpdateUserPayload): Promise<User> => {
+  const response = await apiClient.put<User>(`/users/me`, data);
   return response.data;
 };
 
