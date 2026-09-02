@@ -32,7 +32,7 @@ export const Profile: React.FC = () => {
   }, [user]);
 
   // PUT /users/me
-  const handleSaveChanges = async (e: React.FormEvent) => {
+  const handleSaveChanges = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     setMessage(null);
 
