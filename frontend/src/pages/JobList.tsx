@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { getJobApplications } from "../api/jobs";
 import { type JobResponse } from "../types/job";
 import { useNavigate, Link } from "react-router-dom";
-import { Plus, Briefcase, ChevronRight } from "lucide-react"; // Optional: Lucide icons for extra polish
+// import { Plus, Briefcase, ChevronRight } from "lucide-react"; // Optional: Lucide icons for extra polish
 
 const JobList: React.FC = () => {
   const [jobs, setJobs] = useState<JobResponse[]>([]);

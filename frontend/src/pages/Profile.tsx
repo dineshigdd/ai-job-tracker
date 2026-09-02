@@ -3,14 +3,15 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import * as UserAPI from "../api/user";
-import { Camera, Copy, RefreshCw, AlertTriangle } from "lucide-react";
+import { Camera, AlertTriangle } from "lucide-react";
 
 export const Profile: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  // Form States
-  const [fullName, setFullName] = useState<string>("");
+  // Form States (Replaced fullName with firstName and lastName)
+  const [firstName, setFirstName] = useState<string>("");
+  const [lastName, setLastName] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [currentPassword, setCurrentPassword] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
@@ -24,7 +25,8 @@ export const Profile: React.FC = () => {
   // Sync user context data into form state
   useEffect(() => {
     if (user) {
-      setFullName(user.full_name || "Sarah Jenkins");
+      setFirstName(user.first_name || "Sarah");
+      setLastName(user.last_name || "Jenkins");
       setEmail(user.email || "sarah@example.com");
     }
   }, [user]);
@@ -42,7 +44,8 @@ export const Profile: React.FC = () => {
     try {
       setIsSaving(true);
       await UserAPI.updateUserProfile({
-        full_name: fullName,
+        first_name: firstName,
+        last_name: lastName,
         email: email,
         ...(newPassword ? { password: newPassword } : {}),
       });
@@ -133,13 +136,24 @@ export const Profile: React.FC = () => {
 
             {/* Right: Input Fields Table / Grid */}
             <div className="md:col-span-2 space-y-3 text-sm">
-              {/* Full Name */}
+              {/* First Name */}
               <div className="grid grid-cols-3 items-center bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                <label className="font-medium text-slate-700">Full Name</label>
+                <label className="font-medium text-slate-700">First Name</label>
                 <input
                   type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="col-span-2 px-3 py-1 border border-slate-300 rounded bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Last Name */}
+              <div className="grid grid-cols-3 items-center bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                <label className="font-medium text-slate-700">Last Name</label>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
                   className="col-span-2 px-3 py-1 border border-slate-300 rounded bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
