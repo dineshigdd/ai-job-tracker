@@ -31,10 +31,21 @@ app = FastAPI(
 
 # --- CORS MIDDLEWARE CONFIGURATION ---
 origins = [
+    "https://ai-job-tracker-eosin.vercel.app"
     "http://localhost:3000",   # React dev server
     "http://127.0.0.1:8000",  # Alternative local address
     # Add your production domain here when deploying (e.g., "https://myapp.com")
 ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    # Regex allows any preview deployment under your Vercel project domain
+    allow_origin_regex=r"https://ai-job-tracker-.*\.vercel\.app", 
+    allow_credentials=True,
+    allow_methods=["*"],   # Essential for OPTIONS, POST, PUT, DELETE, etc.
+    allow_headers=["*"],   # Essential for Content-Type, Authorization, etc.
+)
 
 @app.get("/")
 def read_root():
