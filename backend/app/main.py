@@ -1,8 +1,11 @@
+import traceback
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import engine
+from fastapi.responses import JSONResponse
+from app.database import engine, Base
 from sqlalchemy import text
+from app import models  # noqa: F401  — registers every table on Base.metadata
 from app.routers import jobs, users , auth , resumes , dashboard , match_score
 
 
@@ -14,9 +17,14 @@ async def lifespan(app: FastAPI):
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
         print("🟢 SUCCESS: FastAPI backend successfully connected to PostgreSQL database!")
+        # Managed Postgres (Render) starts empty and this project has no migration
+        # tool, so create any missing tables here. Existing tables are left alone.
+        Base.metadata.create_all(bind=engine)
+        print("🟢 SUCCESS: Database schema is up to date.")
     except Exception as e:
         print(f"❌ ERROR: Could not connect to database on startup: {e}")
-    
+        traceback.print_exc()
+
     yield
     
     # --- Shutdown logic (if any) ---
@@ -30,12 +38,12 @@ app = FastAPI(
 )
 
 # --- CORS MIDDLEWARE CONFIGURATION ---
+# An Origin is scheme + host + port only — never a path, so no "/api" suffix here.
 origins = [
     "https://ai-job-tracker-eosin.vercel.app",
-    "https://ai-job-tracker-eosin.vercel.app/api"
     "http://localhost:3000",   # React dev server
+    "http://localhost:5173",   # Vite dev server
     "http://127.0.0.1:8000",  # Alternative local address
-    # Add your production domain here when deploying (e.g., "https://myapp.com")
 ]
 
 app.add_middleware(
@@ -48,9 +56,34 @@ app.add_middleware(
     allow_headers=["*"],   # Essential for Content-Type, Authorization, etc.
 )
 
+
+# Starlette's built-in 500 handler sits OUTSIDE CORSMiddleware, so an unhandled
+# exception returns a bare "Internal Server Error" with no Access-Control-Allow-Origin
+# header — which the browser reports as a CORS failure, hiding the real crash.
+# Registering a handler routes 500s back through the middleware stack so the
+# response carries CORS headers and the frontend sees the actual status.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    print(f"❌ Unhandled error on {request.method} {request.url.path}: {exc!r}")
+    traceback.print_exc()
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the AI-Powered Job Application Tracker API!"}
+
+
+@app.get("/api/health/db", tags=["Health"])
+def health_db():
+    """Report database reachability and which tables exist, for deploy diagnostics."""
+    from sqlalchemy import inspect
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return {"database": "connected", "tables": sorted(inspect(engine).get_table_names())}
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"database": "error", "detail": str(e)})
 
 app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
