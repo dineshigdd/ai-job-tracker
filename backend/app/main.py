@@ -31,7 +31,8 @@ app = FastAPI(
 
 # --- CORS MIDDLEWARE CONFIGURATION ---
 origins = [
-    "https://ai-job-tracker-eosin.vercel.app"
+    "https://ai-job-tracker-eosin.vercel.app",
+    "https://ai-job-tracker-eosin.vercel.app/api"
     "http://localhost:3000",   # React dev server
     "http://127.0.0.1:8000",  # Alternative local address
     # Add your production domain here when deploying (e.g., "https://myapp.com")
