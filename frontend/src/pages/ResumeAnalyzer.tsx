@@ -242,68 +242,76 @@ export const ResumeAnalyzer: React.FC = () => {
               Stored Resumes (Max 25)
             </h3>
 
-            {/* Resume Items List */}
-            <ul className="space-y-2">
-              {storedResumes?.map((res) => (
-                <li
-                  key={res.id}
-                  className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-md text-sm text-slate-700"
-                >
-                  <span className="truncate flex items-center gap-1.5">
-                    <FileText className="w-4 h-4 text-slate-400 shrink-0" />
-                    {res.is_active && (
-                      <strong className="text-blue-600 font-bold">[Active] </strong>
-                    )}
-                    <span className="truncate">{res.filename}</span>
-                  </span>
-
-                  <nav aria-label="Resume actions" className="flex items-center gap-2 shrink-0">
-                    {!res.is_active && (
-                      <button 
-                        type="button"
-                        onClick={() => handleActivateResume(res.id)}
-                        className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1"
-                        title="Set as Active Resume"
-                      >
-                        <Star className="w-3.5 h-3.5" />
-                        Set Active
-                      </button>
-                    )}
-                    <button 
-                      type="button"
-                      onClick={() => handleDeleteResume(res.id)}
-                      className="text-slate-400 hover:text-red-600 transition p-1"
-                      title="Delete Resume"
-                      aria-label={`Delete ${res.filename}`}
+            {/* Resume Items List with Defensive Loading/Empty Checking */}
+            {!storedResumes ? (
+              <p className="text-xs text-slate-400 py-2">Loading stored resumes...</p>
+            ) : storedResumes.length === 0 ? (
+              <p className="text-xs text-slate-400 py-2">No resumes uploaded yet.</p>
+            ) : (
+              <>
+                <ul className="space-y-2">
+                  {storedResumes.map((res) => (
+                    <li
+                      key={res.id}
+                      className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-md text-sm text-slate-700"
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </nav>
-                </li>
-              ))}
-            </ul>
+                      <span className="truncate flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                        {res.is_active && (
+                          <strong className="text-blue-600 font-bold">[Active] </strong>
+                        )}
+                        <span className="truncate">{res.filename}</span>
+                      </span>
 
-            {/* Selection Dropdown */}
-            <div className="flex items-center gap-2 pt-2">
-              <label htmlFor="stored-resume-select" className="text-sm font-medium text-slate-700 shrink-0">
-                Select:
-              </label>
-              <select
-                id="stored-resume-select"
-                value={selectedResumeId}
-                onChange={(e) => {
-                  setSelectedResumeId(e.target.value);
-                  setSelectedFile(null); // Clear manual file upload selection when switching
-                }}
-                className="w-full text-sm border border-slate-300 rounded-md p-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {storedResumes?.map((res) => (
-                  <option key={res.id} value={res.id}>
-                    {res.filename}
-                  </option>
-                ))}
-              </select>
-            </div>
+                      <nav aria-label="Resume actions" className="flex items-center gap-2 shrink-0">
+                        {!res.is_active && (
+                          <button 
+                            type="button"
+                            onClick={() => handleActivateResume(res.id)}
+                            className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1"
+                            title="Set as Active Resume"
+                          >
+                            <Star className="w-3.5 h-3.5" />
+                            Set Active
+                          </button>
+                        )}
+                        <button 
+                          type="button"
+                          onClick={() => handleDeleteResume(res.id)}
+                          className="text-slate-400 hover:text-red-600 transition p-1"
+                          title="Delete Resume"
+                          aria-label={`Delete ${res.filename}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </nav>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* Selection Dropdown */}
+                <div className="flex items-center gap-2 pt-2">
+                  <label htmlFor="stored-resume-select" className="text-sm font-medium text-slate-700 shrink-0">
+                    Select:
+                  </label>
+                  <select
+                    id="stored-resume-select"
+                    value={selectedResumeId}
+                    onChange={(e) => {
+                      setSelectedResumeId(e.target.value);
+                      setSelectedFile(null);
+                    }}
+                    className="w-full text-sm border border-slate-300 rounded-md p-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {storedResumes.map((res) => (
+                      <option key={res.id} value={res.id}>
+                        {res.filename}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
           </article>
 
           {/* Card 3: Target Job Description & Analyze Action */}
@@ -332,7 +340,8 @@ export const ResumeAnalyzer: React.FC = () => {
                 onChange={(e) => setSelectedTrackedJob(e.target.value)}
                 className="w-full text-sm border border-slate-300 rounded-md p-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">Google - Backend Eng</option>
+                <option value="">Select a job...</option>
+                <option value="google">Google - Backend Eng</option>
                 <option value="meta">Meta - Frontend Eng</option>
                 <option value="amazon">Amazon - Fullstack Eng</option>
               </select>
@@ -364,112 +373,85 @@ export const ResumeAnalyzer: React.FC = () => {
             </h2>
           </header>
 
-          {/* Match Score & Assessment Display */}
-          <article className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-center flex flex-col items-center">
-            {/* SVG Progress Circle */}
-            <figure className="relative w-32 h-32 flex items-center justify-center">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                <path
-                  className="text-slate-100"
-                  strokeWidth="3.5"
-                  stroke="currentColor"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-                <path
-                  className="text-emerald-500 stroke-current transition-all duration-500"
-                  strokeWidth="3.5"
-                  strokeDasharray={`${analysisResult?.match_score ?? 85}, 100`}
-                  strokeLinecap="round"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-              </svg>
-              <figcaption className="absolute flex flex-col items-center justify-center">
-                <span className="text-xs text-slate-400 font-medium">( O )</span>
-                <span className="text-2xl font-extrabold text-slate-800">
-                  {analysisResult?.match_score ?? 85}%
-                </span>
-                <span className="text-[10px] text-slate-500 uppercase font-semibold">Match</span>
-              </figcaption>
-            </figure>
-
-            <div className="mt-4">
-              <p className="text-sm text-slate-600 font-medium">Overall Assessment:</p>
-              <p className="text-lg font-bold text-emerald-600">
-                [{analysisResult?.assessment ?? "Excellent Match"}]
+          {!analysisResult ? (
+            /* Empty Analysis State (Before running analysis) */
+            <article className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm text-center space-y-3">
+              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+                <span className="text-xl font-bold">📊</span>
+              </div>
+              <h3 className="text-base font-semibold text-slate-900">No Analysis Calculated</h3>
+              <p className="text-sm text-slate-500 max-w-xs mx-auto">
+                Select or upload a resume and enter a job description to generate AI insights and match scores.
               </p>
-            </div>
-          </article>
+            </article>
+          ) : (
+            /* Real Analysis Results */
+            <>
+              {/* Match Score & Assessment Display */}
+              <article className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-center flex flex-col items-center">
+                <figure className="relative w-32 h-32 flex items-center justify-center">
+                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      className="text-slate-100"
+                      strokeWidth="3.5"
+                      stroke="currentColor"
+                      fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                    <path
+                      className="text-emerald-500 stroke-current transition-all duration-500"
+                      strokeWidth="3.5"
+                      strokeDasharray={`${analysisResult.match_score}, 100`}
+                      strokeLinecap="round"
+                      fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                  </svg>
+                  <figcaption className="absolute flex flex-col items-center justify-center">
+                    <span className="text-2xl font-extrabold text-slate-800">
+                      {analysisResult.match_score}%
+                    </span>
+                    <span className="text-[10px] text-slate-500 uppercase font-semibold">Match</span>
+                  </figcaption>
+                </figure>
 
-          {/* Key Findings Card */}
-          <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-            <h3 className="text-sm font-bold text-slate-800">Key Findings:</h3>
-            <ul className="space-y-2 text-sm text-slate-700">
-              {analysisResult?.key_findings ? (
-                analysisResult.key_findings.map((item, idx) => (
-                  <li key={idx} className="flex items-center gap-2">
-                    {item.matched ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    ) : (
-                      <XCircle className="w-4 h-4 text-red-500 shrink-0" />
-                    )}
-                    <span>{item.text}</span>
-                  </li>
-                ))
-              ) : (
-                <>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Strong Python &amp; FastAPI match</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <XCircle className="w-4 h-4 text-red-500 shrink-0" />
-                    <span>Missing: Docker, Kubernetes</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>8 years experience matches req.</span>
-                  </li>
-                </>
-              )}
-            </ul>
-          </article>
+                <div className="mt-4">
+                  <p className="text-sm text-slate-600 font-medium">Overall Assessment:</p>
+                  <p className="text-lg font-bold text-emerald-600">
+                    {analysisResult.assessment}
+                  </p>
+                </div>
+              </article>
 
-          {/* AI Suggestions Card */}
-          <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-            <h3 className="text-sm font-bold text-slate-800">AI Suggestions:</h3>
-            <ol className="space-y-1.5 text-sm text-slate-700 pl-1">
-              {analysisResult?.suggestions ? (
-                analysisResult.suggestions.map((sug, idx) => (
-                  <li key={idx}>{sug}</li>
-                ))
-              ) : (
-                <>
-                  <li>1. Add Docker experience</li>
-                  <li>2. Highlight cloud projects</li>
-                  <li>3. Quantify achievements</li>
-                </>
-              )}
-            </ol>
-          </article>
+              {/* Key Findings Card */}
+              <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                <h3 className="text-sm font-bold text-slate-800">Key Findings:</h3>
+                <ul className="space-y-2 text-sm text-slate-700">
+                  {analysisResult.key_findings.map((item, idx) => (
+                    <li key={idx} className="flex items-center gap-2">
+                      {item.matched ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                      )}
+                      <span>{item.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </article>
 
-          {/* Action Button */}
-          <button
-            type="button"
-            onClick={handleAnalyze}
-            disabled={isLoading}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition shadow flex items-center justify-center gap-2"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Calculating...</span>
-              </>
-            ) : (
-              "Calculate Match Score"
-            )}
-          </button>
+              {/* AI Suggestions Card */}
+              <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                <h3 className="text-sm font-bold text-slate-800">AI Suggestions:</h3>
+                <ol className="space-y-1.5 text-sm text-slate-700 pl-1">
+                  {analysisResult.suggestions.map((sug, idx) => (
+                    <li key={idx}>{sug}</li>
+                  ))}
+                </ol>
+              </article>
+            </>
+          )}
+
         </section>
 
       </div>
