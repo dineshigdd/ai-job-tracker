@@ -297,7 +297,7 @@ export const ResumeAnalyzer: React.FC = () => {
                 }}
                 className="w-full text-sm border border-slate-300 rounded-md p-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {storedResumes.map((res) => (
+                {storedResumes?.map((res) => (
                   <option key={res.id} value={res.id}>
                     {res.filename}
                   </option>

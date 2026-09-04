@@ -99,7 +99,7 @@ const JobList: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {jobs.map((job) => (
+              {jobs?.map((job) => (
                 <tr
                   key={job.id}
                   onClick={() => navigate(`/jobs/${job.id}`)}
