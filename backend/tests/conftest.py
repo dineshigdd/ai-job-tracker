@@ -50,8 +50,12 @@ def db_session():
 @pytest.fixture(scope="function")
 def test_user(db_session):
     """Create a unique user for each test function."""
+    # first_name/last_name are NOT NULL on the model, so omitting them made every
+    # test that touched this fixture error out on the INSERT rather than run.
     user = User(
         id=uuid4(),
+        first_name="Test",
+        last_name="User",
         email=f"test_{uuid4().hex[:8]}@example.com",
         hashed_password="hashed_password_placeholder"
     )
