@@ -62,7 +62,7 @@ const JobForm: React.FC = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>, targetStatus?: JobStatus) => {
+  const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>, targetStatus?: JobStatus) => {
     e.preventDefault();
 
     if (!formData.company_name.trim() || !formData.job_title.trim()) {
