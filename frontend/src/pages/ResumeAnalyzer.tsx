@@ -16,28 +16,6 @@ import type {
   ResumeAnalysisResponse 
 } from "../types/resume";
 
-// interface StoredResume {
-//   id: string;
-//   filename: string;
-//   is_active: boolean;
-//   content_hash: string;
-//   extracted_text_length: number;
-// }
-
-// interface KeyFinding {
-//   text: string;
-//   matched: boolean;
-// }
-
-// interface AnalysisResult {
-//   filename?: string;
-//   ai_feedback?: string;
-//   match_score?: number;
-//   assessment?: string;
-//   key_findings?: KeyFinding[];
-//   suggestions?: string[];
-// }
-
 export const ResumeAnalyzer: React.FC = () => {
   // State: Inputs
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -144,7 +122,6 @@ export const ResumeAnalyzer: React.FC = () => {
       }
 
       const data = response;
-      // 2. Spread `data` so required fields like `resume` and `extracted_text_length` are included
       setAnalysisResult({
         ...data,
         filename: data.filename || data.resume?.filename || "Resume.pdf",
@@ -401,7 +378,7 @@ export const ResumeAnalyzer: React.FC = () => {
                     <path
                       className="text-emerald-500 stroke-current transition-all duration-500"
                       strokeWidth="3.5"
-                      strokeDasharray={`${analysisResult.match_score}, 100`}
+                      strokeDasharray={`${analysisResult.match_score ?? 0}, 100`}
                       strokeLinecap="round"
                       fill="none"
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
@@ -409,7 +386,7 @@ export const ResumeAnalyzer: React.FC = () => {
                   </svg>
                   <figcaption className="absolute flex flex-col items-center justify-center">
                     <span className="text-2xl font-extrabold text-slate-800">
-                      {analysisResult.match_score}%
+                      {analysisResult.match_score ?? 0}%
                     </span>
                     <span className="text-[10px] text-slate-500 uppercase font-semibold">Match</span>
                   </figcaption>
@@ -418,7 +395,7 @@ export const ResumeAnalyzer: React.FC = () => {
                 <div className="mt-4">
                   <p className="text-sm text-slate-600 font-medium">Overall Assessment:</p>
                   <p className="text-lg font-bold text-emerald-600">
-                    {analysisResult.assessment}
+                    {analysisResult.assessment ?? "N/A"}
                   </p>
                 </div>
               </article>
@@ -427,16 +404,20 @@ export const ResumeAnalyzer: React.FC = () => {
               <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
                 <h3 className="text-sm font-bold text-slate-800">Key Findings:</h3>
                 <ul className="space-y-2 text-sm text-slate-700">
-                  {analysisResult.key_findings.map((item, idx) => (
-                    <li key={idx} className="flex items-center gap-2">
-                      {item.matched ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      ) : (
-                        <XCircle className="w-4 h-4 text-red-500 shrink-0" />
-                      )}
-                      <span>{item.text}</span>
-                    </li>
-                  ))}
+                  {(analysisResult.key_findings ?? []).length === 0 ? (
+                    <li className="text-xs text-slate-400">No key findings provided.</li>
+                  ) : (
+                    analysisResult.key_findings?.map((item, idx) => (
+                      <li key={idx} className="flex items-center gap-2">
+                        {item.matched ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                        )}
+                        <span>{item.text}</span>
+                      </li>
+                    ))
+                  )}
                 </ul>
               </article>
 
@@ -444,9 +425,13 @@ export const ResumeAnalyzer: React.FC = () => {
               <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
                 <h3 className="text-sm font-bold text-slate-800">AI Suggestions:</h3>
                 <ol className="space-y-1.5 text-sm text-slate-700 pl-1">
-                  {analysisResult.suggestions.map((sug, idx) => (
-                    <li key={idx}>{sug}</li>
-                  ))}
+                  {(analysisResult.suggestions ?? []).length === 0 ? (
+                    <li className="text-xs text-slate-400">No suggestions provided.</li>
+                  ) : (
+                    analysisResult.suggestions?.map((sug, idx) => (
+                      <li key={idx}>{sug}</li>
+                    ))
+                  )}
                 </ol>
               </article>
             </>
