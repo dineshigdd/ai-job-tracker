@@ -244,7 +244,7 @@ export const ResumeAnalyzer: React.FC = () => {
 
             {/* Resume Items List */}
             <ul className="space-y-2">
-              {storedResumes.map((res) => (
+              {storedResumes?.map((res) => (
                 <li
                   key={res.id}
                   className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-md text-sm text-slate-700"
