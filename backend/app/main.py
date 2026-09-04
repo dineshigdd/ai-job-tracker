@@ -76,14 +76,16 @@ def read_root():
 
 @app.get("/api/health/db", tags=["Health"])
 def health_db():
-    """Report database reachability and which tables exist, for deploy diagnostics."""
-    from sqlalchemy import inspect
+    """Diagnostic endpoint to verify database connectivity."""
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
-        return {"database": "connected", "tables": sorted(inspect(engine).get_table_names())}
+        return {"status": "ok", "database": "connected"}
     except Exception as e:
-        return JSONResponse(status_code=503, content={"database": "error", "detail": str(e)})
+        return JSONResponse(
+            status_code=503, 
+            content={"status": "unhealthy", "database": "disconnected"}
+        )
 
 app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
