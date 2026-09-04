@@ -40,9 +40,10 @@ export const ResumeAnalyzer: React.FC = () => {
   const fetchResumes = async () => {
     try {
       const response = await resumeApi.getResumeList();
-      setStoredResumes(response);
-      if (response.length > 0) {
-        const active = response.find((r) => r.is_active) || response[0];
+      const resumesArray = Array.isArray(response) ? response : [];
+      setStoredResumes(resumesArray);
+      if (resumesArray.length > 0) {
+        const active = resumesArray.find((r) => r.is_active) || resumesArray[0];
         setSelectedResumeId(active.id);
       }
     } catch (err) {
@@ -128,12 +129,12 @@ export const ResumeAnalyzer: React.FC = () => {
         ai_feedback: data.ai_feedback || "",
         match_score: data.match_score ?? 85,
         assessment: (data.match_score ?? 85) >= 80 ? "Excellent Match" : "Good Match",
-        key_findings: data.key_findings || [
+        key_findings: Array.isArray(data.key_findings) ? data.key_findings : [
           { text: "Strong Python & FastAPI match", matched: true },
           { text: "Missing: Docker, Kubernetes", matched: false },
           { text: "8 years experience matches req.", matched: true },
         ],
-        suggestions: data.suggestions || [
+        suggestions: Array.isArray(data.suggestions) ? data.suggestions : [
           "1. Add Docker experience",
           "2. Highlight cloud projects",
           "3. Quantify achievements",

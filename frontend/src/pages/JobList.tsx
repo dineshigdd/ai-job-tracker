@@ -64,10 +64,7 @@ const JobList: React.FC = () => {
       </header>
 
       {/* Conditional Rendering for Empty State vs Table */}
-      {!jobs ? (
-          /* Loading Spinner or Skeleton */
-          <div className="p-8 text-center text-slate-500">Loading applications...</div>
-        ) : jobs.length === 0 ? (
+        { !jobs?.length ? (
           /* Enhanced Empty State UX */
           <div className="bg-white border border-slate-200 rounded-xl p-12 text-center shadow-sm space-y-4">
             <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
