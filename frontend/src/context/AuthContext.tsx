@@ -33,10 +33,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkAuthStatus();
   }, []);
 
-  // 2. Login method
+  // 2. Login method — /auth/login already returns the profile, so there is no
+  //    follow-up /users/me call to make.
   const login = async (email: string, password: string) => {
-    await loginUser(email, password);
-    const userData = await fetchCurrentUser();
+    const userData = await loginUser(email, password);
     setUser(userData);
   };
 
