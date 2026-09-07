@@ -123,6 +123,7 @@ export const ResumeAnalyzer: React.FC = () => {
       }
 
       const data = response;
+      console.log("Analysis Result:", data);
       setAnalysisResult({
         ...data,
         filename: data.filename || data.resume?.filename || "Resume.pdf",
@@ -342,9 +343,9 @@ export const ResumeAnalyzer: React.FC = () => {
             </button>
           </article>
         </section>
-
+        
         {/* ================= RIGHT COLUMN: AI RESULTS ================= */}
-        <section aria-labelledby="ai-results-heading" className="space-y-6">
+        <section aria-labelledby="ai-results-heading" className="space-y-6 max-h-[850px] overflow-y-auto pr-1">
           <header>
             <h2 id="ai-results-heading" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               RIGHT COLUMN: AI Results
@@ -352,7 +353,7 @@ export const ResumeAnalyzer: React.FC = () => {
           </header>
 
           {!analysisResult ? (
-            /* Empty Analysis State (Before running analysis) */
+            /* Empty Analysis State */
             <article className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm text-center space-y-3">
               <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
                 <span className="text-xl font-bold">📊</span>
@@ -401,43 +402,76 @@ export const ResumeAnalyzer: React.FC = () => {
                 </div>
               </article>
 
-              {/* Key Findings Card */}
-              <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                <h3 className="text-sm font-bold text-slate-800">Key Findings:</h3>
-                <ul className="space-y-2 text-sm text-slate-700">
-                  {(analysisResult.key_findings ?? []).length === 0 ? (
-                    <li className="text-xs text-slate-400">No key findings provided.</li>
-                  ) : (
-                    analysisResult.key_findings?.map((item, idx) => (
-                      <li key={idx} className="flex items-center gap-2">
-                        {item.matched ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        ) : (
-                          <XCircle className="w-4 h-4 text-red-500 shrink-0" />
-                        )}
-                        <span>{item.text}</span>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </article>
+              {/* Styled AI Feedback Block */}
+              {(() => {
+                let parsedFeedback: Record<string, any> | null = null;
+                try {
+                  if (analysisResult.ai_feedback) {
+                    parsedFeedback = typeof analysisResult.ai_feedback === "string" 
+                      ? JSON.parse(analysisResult.ai_feedback) 
+                      : analysisResult.ai_feedback;
+                  }
+                } catch (e) {
+                  parsedFeedback = null;
+                }
 
-              {/* AI Suggestions Card */}
-              <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                <h3 className="text-sm font-bold text-slate-800">AI Suggestions:</h3>
-                <ol className="space-y-1.5 text-sm text-slate-700 pl-1">
-                  {(analysisResult.suggestions ?? []).length === 0 ? (
-                    <li className="text-xs text-slate-400">No suggestions provided.</li>
-                  ) : (
-                    analysisResult.suggestions?.map((sug, idx) => (
-                      <li key={idx}>{sug}</li>
-                    ))
-                  )}
-                </ol>
-              </article>
+                if (parsedFeedback) {
+                  return (
+                    <div className="space-y-4">
+                      {/* Strengths */}
+                      {parsedFeedback.strengths && (
+                        <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                            Overall Strengths
+                          </h3>
+                          <div className="text-sm text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-md border border-slate-100">
+                            {parsedFeedback.strengths}
+                          </div>
+                        </article>
+                      )}
+
+                      {/* Improvements */}
+                      {parsedFeedback.improvements && (
+                        <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                            Areas for Improvement
+                          </h3>
+                          <div className="text-sm text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-md border border-slate-100">
+                            {parsedFeedback.improvements}
+                          </div>
+                        </article>
+                      )}
+
+                      {/* Action Steps */}
+                      {parsedFeedback.action_steps && (
+                        <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                            <Star className="w-4 h-4 text-blue-600 shrink-0" />
+                            Actionable Next Steps
+                          </h3>
+                          <div className="text-sm text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-md border border-slate-100">
+                            {parsedFeedback.action_steps}
+                          </div>
+                        </article>
+                      )}
+                    </div>
+                  );
+                }
+
+                // Fallback: If raw text / markdown
+                return analysisResult.ai_feedback ? (
+                  <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                    <h3 className="text-sm font-bold text-slate-800">Detailed AI Feedback</h3>
+                    <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed bg-slate-50 p-4 rounded-lg border border-slate-100">
+                      {analysisResult.ai_feedback}
+                    </div>
+                  </article>
+                ) : null;
+              })()}
             </>
           )}
-
         </section>
 
       </div>
