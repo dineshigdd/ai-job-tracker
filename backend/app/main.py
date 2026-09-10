@@ -92,7 +92,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(resumes.router, prefix="/api/resumes", tags=["Resumes"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
-# app.include_router(match_score.router, prefix="/api/jobs", tags=["Match Score"])
+app.include_router(match_score.router, prefix="/api/jobs", tags=["Match Score"])
 
 
 # app.include_router(jobs.router)

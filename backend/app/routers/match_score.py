@@ -32,10 +32,8 @@ from app.services.match_score import MatchScoreResult, calculate_match_score
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(
-    prefix="/jobs",
-    tags=["Match Score"]
-)
+router = APIRouter(tags=["Match Score"])
+
 
 
 def _get_owned_job(db: Session, user: User, job_id: UUID) -> Job:
