@@ -9,9 +9,12 @@ import JobDetail from "./pages/JobDetail";
 import JobForm from "./pages/JobForm";
 import ResumeAnalyzer from "./pages/ResumeAnalyzer";
 import Profile from "./pages/Profile";
+import MatchScore from "./pages/MatchScore";
 
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { DashboardLayout } from "./components/DashboardLayout";
+
+
 // Define your clean routing map without duplicates or self-loops
 const router = createBrowserRouter([
   {
@@ -57,7 +60,7 @@ const router = createBrowserRouter([
           {
             path: "/jobs/:id/edit",
             element: <JobForm />,
-          },          
+          },
           {
             path: "/resumes/analyze",
             element: <ResumeAnalyzer />,
@@ -66,6 +69,16 @@ const router = createBrowserRouter([
             path: "/users/me",
             element: <Profile />,
           },
+          {
+            path:"/match-score",
+            element: <MatchScore />,
+          },
+          {
+            // Detail view: MatchScore reads `:jobId` via useParams and renders
+            // MatchScoreDetail directly for this path (see pages/MatchScore.tsx "Path A").
+            path: "/jobs/:jobId/match-score",
+            element: <MatchScore />,
+          }
           ]
       }
       
